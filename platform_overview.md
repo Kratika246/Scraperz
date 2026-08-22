@@ -67,7 +67,7 @@ Copy each collector ID from Scraper Studio (starts with `c_`) into `.env.local`.
 | Env var | Used by | Input payload | Flexible output fields |
 |---|---|---|---|
 | `BRIGHTDATA_API_KEY` | All collectors | Bearer token | — |
-| `BRIGHTDATA_COLLECTOR_BRAND_WEBSITE` | `POST /api/brands` | `{ url }` | `text` / `markdown` / `html` / `title` / `description` |
+| `BRIGHTDATA_COLLECTOR_BRAND_WEBSITE` | `POST /api/brands` | `{ url }` | `title`, `description`, `text` / `markdown` (Groq). `raw_html` stored, not sent to the LLM |
 | `BRIGHTDATA_COLLECTOR_COMPETITORS` | Discover competitors | `{ keyword, industry, brand_name }` | `name`, `website_url` / `url` / `link` |
 | `BRIGHTDATA_COLLECTOR_SOCIAL_HANDLES` | Find handles | `{ url }` | `platform`, `handle`, `profile_url` or `linkedin_url`, `twitter_url`, … |
 | `BRIGHTDATA_COLLECTOR_SOCIAL_CONTENT` | Scrape posts | `{ url, platform }` | `post_text` / `text`, `posted_at`, likes/comments |

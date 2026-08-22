@@ -8,7 +8,7 @@
  * Match each collector's Input tab to the payloads below.
  *
  * | Env | Typical input | Expected output fields (flexible) |
- * | BRIGHTDATA_COLLECTOR_BRAND_WEBSITE | { url } | text / markdown / html / title / description |
+ * | BRIGHTDATA_COLLECTOR_BRAND_WEBSITE | { url } | title, description, text, markdown, raw_html |
  * | BRIGHTDATA_COLLECTOR_COMPETITORS | { keyword, industry, brand_name } | name, website_url / url / link |
  * | BRIGHTDATA_COLLECTOR_SOCIAL_HANDLES | { url } | platform, handle, profile_url — or linkedin_url, twitter_url, ... |
  * | BRIGHTDATA_COLLECTOR_SOCIAL_CONTENT | { url, platform } | post_text / text, posted_at, likes, comments |
@@ -156,11 +156,16 @@ export async function scrapeBrandWebsite(websiteUrl: string) {
     { url: websiteUrl },
   ]);
   const row = rows[0] || {};
-  const text =
-    str(row, 'text', 'markdown', 'content', 'description', 'body', 'page_text') ||
-    JSON.stringify(row).slice(0, 12000);
-  const raw = JSON.stringify(rows);
-  return { raw, text, rows };
+  const title = str(row, 'title');
+  const description = str(row, 'description');
+  const body = str(row, 'text', 'markdown', 'content', 'body', 'page_text');
+  // Prefer readable fields. Never send raw_html to the LLM — it is scripts/CSS noise.
+  const text = [title && `Title: ${title}`, description && `Description: ${description}`, body]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 12000);
+  const raw = str(row, 'raw_html', 'html') || JSON.stringify({ url: str(row, 'url'), title, description });
+  return { raw, text, rows, title, description };
 }
 
 export async function scrapeCompetitors(industry: string, brandName?: string) {
