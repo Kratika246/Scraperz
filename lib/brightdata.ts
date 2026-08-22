@@ -22,7 +22,21 @@
 import { bdclient } from '@brightdata/sdk';
 import * as cheerio from 'cheerio';
 
-const bd = new bdclient({ apiKey: process.env.BRIGHTDATA_API_KEY });
+let bdInstance: bdclient | null = null;
+function getBdClient() {
+  if (!bdInstance) {
+    const apiKey = process.env.BRIGHTDATA_API_KEY;
+    console.log('--- Debug loaded BRIGHTDATA_API_KEY ---');
+    console.log(JSON.stringify(apiKey));
+    console.log('---------------------------------------');
+    if (!apiKey) {
+      throw new Error('BRIGHTDATA_API_KEY is not set');
+    }
+    bdInstance = new bdclient({ apiKey });
+  }
+  return bdInstance;
+}
+
 
 const API_KEY = process.env.BRIGHTDATA_API_KEY || '';
 const COLLECTOR_VERSION = process.env.BRIGHTDATA_COLLECTOR_VERSION; // e.g. "dev"
@@ -107,7 +121,7 @@ export async function runStudioCollector(
     throw new Error(`Scraper Studio ${envName} did not return collection_id: ${trigger.text.slice(0, 400)}`);
   }
 
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + 300_000; // 5-minute timeout
   while (Date.now() < deadline) {
     const dataset = await brightFetch(`/dca/dataset?id=${encodeURIComponent(collectionId)}`);
 
@@ -123,14 +137,26 @@ export async function runStudioCollector(
     if (Array.isArray(dataset.body)) {
       return dataset.body as Record<string, unknown>[];
     }
-    const status = (dataset.body as { status?: string })?.status;
-    if (status === 'failed' || status === 'error') {
-      throw new Error(`Scraper Studio collection ${collectionId} failed`);
+    // Some collectors return a single object (not wrapped in an array)
+    if (
+      dataset.body &&
+      typeof dataset.body === 'object' &&
+      !('status' in (dataset.body as object) && Object.keys(dataset.body as object).length === 1)
+    ) {
+      const status = (dataset.body as { status?: string })?.status;
+      if (status === 'failed' || status === 'error') {
+        throw new Error(`Scraper Studio collection ${collectionId} failed`);
+      }
+      // If the object looks like a result row (has url or title or raw_html), wrap it
+      const bodyObj = dataset.body as Record<string, unknown>;
+      if (bodyObj.url || bodyObj.raw_html || bodyObj.title || bodyObj.text) {
+        return [bodyObj];
+      }
     }
     await sleep(5000);
   }
 
-  throw new Error(`Scraper Studio collection ${collectionId} timed out after 180s`);
+  throw new Error(`Scraper Studio collection ${collectionId} timed out after 300s`);
 }
 
 function sleep(ms: number) {
@@ -162,36 +188,18 @@ export function configuredCollectors() {
 
 // lib/brightdata.ts
 export async function scrapeBrandWebsite(url: string) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout limit
+  const collectorId = process.env.BRIGHTDATA_COLLECTOR_BRAND_WEBSITE || '';
+  const rows = await runStudioCollector(
+    collectorId,
+    'BRIGHTDATA_COLLECTOR_BRAND_WEBSITE',
+    [{ url }]
+  );
 
-  try {
-    const res = await fetch(
-      `https://api.brightdata.com/dca/trigger?collector=${process.env.BRIGHTDATA_COLLECTOR_BRAND_WEBSITE}&queue_next=1`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.BRIGHTDATA_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([{ url }]),
-        signal: controller.signal,
-      }
-    );
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) throw new Error(`Bright Data API error: ${res.statusText}`);
-
-    const data = await res.json();
-    return {
-      text: data[0]?.text || data[0]?.markdown || '',
-      raw: data[0]?.raw_html || data[0]?.html || '',
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
-  }
+  const row = rows[0] || {};
+  return {
+    text: str(row, 'text', 'markdown'),
+    raw: str(row, 'raw_html', 'html'),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -504,13 +512,57 @@ function extractHandle(platform: string, url: URL): string {
 }
 
 export async function scrapeSocialHandles(websiteUrl: string) {
-  // Web Unlocker fetch — handles JS-rendered pages, bot detection, etc.
-  const html = await bd.scrapeUrl(websiteUrl, {
-    dataFormat: 'html',
-    // country: 'us', // optional
-  });
+  // 1. Dedicated social handles collector from Scraper Studio if configured
+  if (COLLECTORS.socialHandles && COLLECTORS.socialHandles.startsWith('c_')) {
+    const rows = await runStudioCollector(
+      COLLECTORS.socialHandles,
+      'BRIGHTDATA_COLLECTOR_SOCIAL_HANDLES',
+      [{ url: websiteUrl }]
+    );
 
-  const $ = cheerio.load(html as string);
+    return rows.map((row) => ({
+      platform: str(row, 'platform'),
+      handle: str(row, 'handle'),
+      profile_url: str(row, 'profile_url', 'url'),
+      verified: true,
+      verification_confidence: num(row, 'verification_confidence', 'confidence') || 0.9,
+    }));
+  }
+
+  let html = '';
+
+  // 2. Reuse the brand website Scraper Studio collector — fetch raw HTML directly
+  if (COLLECTORS.brandWebsite && COLLECTORS.brandWebsite.startsWith('c_')) {
+    const rows = await runStudioCollector(
+      COLLECTORS.brandWebsite,
+      'BRIGHTDATA_COLLECTOR_BRAND_WEBSITE',
+      [{ url: websiteUrl }]
+    );
+    const row = rows[0] || {};
+    // Prefer raw HTML so cheerio can extract links; fall back to markdown/text
+    html = str(row, 'raw_html', 'html', 'markdown', 'text');
+  } else {
+    // 3. Fall back to Web Unlocker if no Scraper Studio collectors are available
+    const bd = getBdClient();
+    try {
+      html = (await bd.scrapeUrl(websiteUrl, {
+        dataFormat: 'html',
+        // country: 'us', // optional
+      })) as string;
+    } catch (error: any) {
+      console.error('--- Bright Data scrapeUrl Error Details ---');
+      console.error('Message:', error.message);
+      if (error.response) {
+        console.error('Response Status:', error.response.status);
+        console.error('Response Data:', error.response.data);
+      }
+      console.error('Full Error Object:', error);
+      console.error('-------------------------------------------');
+      throw error;
+    }
+  }
+
+  const $ = cheerio.load(html);
   const links: {
     platform: string;
     handle: string;

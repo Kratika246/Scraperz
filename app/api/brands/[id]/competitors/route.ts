@@ -20,7 +20,7 @@ export async function GET(
 
   const { data: competitors, error } = await supabase
     .from('competitors')
-    .select('*')
+    .select('*, competitor_social_handles(*)')
     .eq('brand_id', id)
     .order('confidence_score', { ascending: false });
 

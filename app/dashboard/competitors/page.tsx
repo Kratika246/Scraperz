@@ -62,7 +62,11 @@ export default function CompetitorsPage() {
 
   async function findHandles(id: string) {
     setBusyId(id);
-    await fetch(`/api/competitors/${id}/find-handles`, { method: 'POST' });
+    const res = await fetch(`/api/competitors/${id}/find-handles`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Find handles failed');
+    }
     await loadData();
     setBusyId(null);
   }
@@ -157,6 +161,26 @@ export default function CompetitorsPage() {
                     <span className="font-medium text-slate-700">
                       {Math.round(competitor.confidence_score * 100)}%
                     </span>
+                  </div>
+                )}
+
+                {competitor.competitor_social_handles && competitor.competitor_social_handles.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Social Channels</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {competitor.competitor_social_handles.map((h: any) => (
+                        <a
+                          key={h.id}
+                          href={h.profile_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium transition"
+                        >
+                          <span className="text-slate-400 capitalize mr-1">{h.platform}:</span>
+                          <span>@{h.handle}</span>
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
 
