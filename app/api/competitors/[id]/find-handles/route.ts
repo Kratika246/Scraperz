@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { scrapeSocialHandles } from '@/lib/brightdata';
 
 // POST /api/competitors/[id]/find-handles
-// Triggers n8n to find social handles for this competitor
+// Synchronously uses Bright Data (mocked for demo) to find handles
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,33 +30,41 @@ export async function POST(
     return NextResponse.json({ error: 'Competitor not found' }, { status: 404 });
   }
 
-  // Get brand context to help with verification
-  const { data: brand } = await supabase
-    .from('brands')
-    .select('context')
-    .eq('id', competitor.brand_id)
-    .single();
-
-  // Trigger n8n webhook
-  try {
-    const webhookUrl = process.env.N8N_SOCIAL_HANDLES_WEBHOOK_URL || 'http://localhost/dummy';
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET || '',
-      },
-      body: JSON.stringify({
-        competitor_id: competitor.id,
-        tenant_id: competitor.tenant_id,
-        name: competitor.name,
-        website_url: competitor.website_url,
-        brand_context: brand?.context,
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to trigger social handles webhook:', err);
+  if (!competitor.website_url) {
+      return NextResponse.json({ error: 'No website URL to scrape' }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, status: 'running' });
+  // 1. Call Bright Data
+  const handles = await scrapeSocialHandles(competitor.website_url);
+
+  // 2. Insert handles
+  if (handles.length > 0) {
+    const { error: insertError } = await supabase
+      .from('competitor_social_handles')
+      .upsert(
+        handles.map((h) => ({
+          competitor_id: competitor.id,
+          tenant_id: competitor.tenant_id,
+          platform: h.platform,
+          handle: h.handle,
+          profile_url: h.profile_url,
+          verified: h.verified,
+          verification_confidence: h.verification_confidence,
+          status: 'ready'
+        })),
+        { onConflict: 'competitor_id, platform, handle' }
+      );
+
+    if (insertError) {
+      console.error('Failed to insert handles:', insertError);
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+  }
+
+  const { data: newHandles } = await supabase
+    .from('competitor_social_handles')
+    .select('*')
+    .eq('competitor_id', id);
+
+  return NextResponse.json({ ok: true, handles: newHandles });
 }

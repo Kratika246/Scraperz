@@ -1,0 +1,95 @@
+{
+  "name": "0. Brand Scrape",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brand-scrape",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-brand-scrape",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "brand-scrape-webhook-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brightdata.com/dca/trigger",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 3691c1f4-35a8-4b61-82ed-fe3177c56150"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"collector\": \"c_fake_collector_id_brand\",\n  \"url\": \"{{$json.body.website_url}}\"\n}",
+        "options": {}
+      },
+      "id": "bd-scraper",
+      "name": "Bright Data Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/brands/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Webhook-Secret",
+              "value": "super_secret_hackathon_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"brand_id\": \"{{ $('Webhook').item.json.body.brand_id }}\",\n  \"tenant_id\": \"{{ $('Webhook').item.json.body.tenant_id }}\",\n  \"context\": {\n    \"industry\": \"SaaS\",\n    \"tagline\": \"AI workflow automation\",\n    \"target_audience\": \"Enterprise marketing teams\",\n    \"value_props\": [\"Save time\", \"Increase ROI\"],\n    \"products\": [\"Workflow Engine\", \"Analytics\"],\n    \"tone_keywords\": [\"Professional\", \"Innovative\"]\n  }\n}",
+        "options": {}
+      },
+      "id": "callback",
+      "name": "Callback to Next.js",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Bright Data Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bright Data Scraper": {
+      "main": [
+        [
+          {
+            "node": "Callback to Next.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

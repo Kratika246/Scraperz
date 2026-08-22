@@ -14,6 +14,7 @@ export default function CompetitorsPage() {
   const [filter, setFilter] = useState<'all' | 'discovered' | 'approved' | 'rejected'>('all');
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState('');
 
   // Load initial data
   useEffect(() => {
@@ -38,64 +39,34 @@ export default function CompetitorsPage() {
     loadData();
   }, []);
 
-  // Poll for competitors if discovery is running
-  const { data: polledCompetitors, stop: stopPolling } = usePolling({
-    enabled: brand?.competitor_discovery_status === 'running' || isDiscovering,
-    fetcher: async () => {
-      if (!brand) return [];
-      
-      // Check brand status first
-      const bRes = await fetch('/api/brands');
-      const bData = await bRes.json();
-      const currentBrand = bData.brands?.[0];
-      setBrand(currentBrand);
-
-      if (currentBrand?.competitor_discovery_status === 'done') {
-        setIsDiscovering(false);
-      }
-
-      // Fetch latest competitors
-      const cRes = await fetch(`/api/brands/${brand.id}/competitors`);
-      const cData = await cRes.json();
-      return cData.competitors || [];
-    },
-    shouldStop: () => {
-      // We stop polling when brand status is no longer 'running'
-      // The fetcher updates the brand state, so we just check it next tick
-      // Alternatively, we could return a composite object from fetcher.
-      return false; 
-    }
-  });
-
-  // Use polled data if available
-  useEffect(() => {
-    if (polledCompetitors && polledCompetitors.length > 0) {
-      setCompetitors(polledCompetitors);
-    }
-  }, [polledCompetitors]);
-  
-  // Stop polling if brand status changes to done
-  useEffect(() => {
-      if (brand?.competitor_discovery_status === 'done') {
-          setIsDiscovering(false);
-          stopPolling();
-      }
-  }, [brand?.competitor_discovery_status, stopPolling]);
-
+  // No polling needed, API is synchronous now
 
   async function handleDiscover() {
     if (!brand) return;
     setIsDiscovering(true);
-    setBrand({ ...brand, competitor_discovery_status: 'running' });
+    setLoadingMessage('Activating Bright Data Web Unlocker...');
+    
+    // Sequence of messages for the demo
+    const intervals = [
+      setTimeout(() => setLoadingMessage('Searching SERP for competitors...'), 1500),
+      setTimeout(() => setLoadingMessage('Parsing top domains...'), 3000),
+    ];
 
     try {
-      await fetch(`/api/brands/${brand.id}/discover-competitors`, {
+      const res = await fetch(`/api/brands/${brand.id}/discover-competitors`, {
         method: 'POST',
       });
+      const data = await res.json();
+      if (data.competitors) {
+          setCompetitors(data.competitors);
+      }
+      setBrand({ ...brand, competitor_discovery_status: 'done' });
     } catch (err) {
       console.error('Failed to trigger discovery', err);
+    } finally {
+      intervals.forEach(clearTimeout);
       setIsDiscovering(false);
-      setBrand({ ...brand, competitor_discovery_status: 'failed' });
+      setLoadingMessage('');
     }
   }
 
@@ -133,13 +104,20 @@ export default function CompetitorsPage() {
         subtitle="Review and manage competitors discovered for your brand"
         actions={
           brand && (
-            <Button
-              onClick={handleDiscover}
-              loading={brand.competitor_discovery_status === 'running' || isDiscovering}
-              disabled={!brand.context}
-            >
-              Discover competitors
-            </Button>
+            <div className="flex items-center gap-4">
+              {loadingMessage && (
+                <span className="text-sm text-primary-600 animate-pulse font-medium">
+                  {loadingMessage}
+                </span>
+              )}
+              <Button
+                onClick={handleDiscover}
+                loading={isDiscovering}
+                disabled={!brand.context || isDiscovering}
+              >
+                Discover competitors
+              </Button>
+            </div>
           )
         }
       />

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { scrapeSocialContent } from '@/lib/brightdata';
 
 // POST /api/competitors/[id]/scrape-content
-// Triggers n8n to scrape recent posts from all verified handles for a competitor
+// Synchronously uses Bright Data (mocked for demo) to scrape posts from all verified handles
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -18,7 +19,6 @@ export async function POST(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  // Get competitor
   const { data: competitor, error } = await supabase
     .from('competitors')
     .select('id, tenant_id, name')
@@ -40,25 +40,37 @@ export async function POST(
       return NextResponse.json({ error: 'No verified handles found to scrape' }, { status: 400 });
   }
 
-  // Trigger n8n webhook
-  try {
-    const webhookUrl = process.env.N8N_CONTENT_SCRAPE_WEBHOOK_URL || 'http://localhost/dummy';
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Secret': process.env.N8N_WEBHOOK_SECRET || '',
-      },
-      body: JSON.stringify({
-        competitor_id: competitor.id,
-        tenant_id: competitor.tenant_id,
-        name: competitor.name,
-        handles
-      }),
-    });
-  } catch (err) {
-    console.error('Failed to trigger content scrape webhook:', err);
+  // 1. Call Bright Data for each handle
+  const allContent = [];
+  for (const handle of handles) {
+      const content = await scrapeSocialContent(handle.profile_url, handle.platform);
+      
+      for (const item of content) {
+          allContent.push({
+            competitor_id: competitor.id,
+            tenant_id: competitor.tenant_id,
+            handle_id: handle.id,
+            platform: item.platform,
+            content_type: item.content_type,
+            text: item.text,
+            media_urls: item.media_urls,
+            posted_at: item.posted_at,
+            engagement_metrics: item.engagement_metrics
+          });
+      }
   }
 
-  return NextResponse.json({ ok: true, status: 'running' });
+  // 2. Insert into DB
+  if (allContent.length > 0) {
+    const { error: insertError } = await supabase
+      .from('competitor_content')
+      .insert(allContent);
+
+    if (insertError) {
+      console.error('Failed to insert content:', insertError);
+      return NextResponse.json({ error: insertError.message }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ ok: true, scraped_count: allContent.length });
 }

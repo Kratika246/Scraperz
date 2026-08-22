@@ -1,0 +1,136 @@
+{
+  "name": "5. Content Generation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-content",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-generate-content",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "generate-content-webhook-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-YOUR-OPENAI-KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Write a social media post...\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "ai-text",
+      "name": "Generate Draft (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-YOUR-OPENAI-KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"dall-e-3\",\n  \"prompt\": \"A professional enterprise security illustration\"\n}",
+        "options": {}
+      },
+      "id": "ai-image",
+      "name": "Generate Image (DALL-E)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/generated-content/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Webhook-Secret",
+              "value": "super_secret_hackathon_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"brand_id\": \"{{ $('Webhook').item.json.body.brand_id }}\",\n  \"tenant_id\": \"{{ $('Webhook').item.json.body.tenant_id }}\",\n  \"gap_report_id\": \"{{ $('Webhook').item.json.body.gap_report_id }}\",\n  \"title\": \"Enterprise Security Best Practices\",\n  \"draft_text\": \"{{ $('Generate Draft (OpenAI)').item.json.choices[0].message.content }}\",\n  \"generated_image_urls\": [ \"{{ $('Generate Image (DALL-E)').item.json.data[0].url }}\" ],\n  \"opportunity_score\": 95,\n  \"evidence_links\": []\n}",
+        "options": {}
+      },
+      "id": "callback",
+      "name": "Callback to Next.js",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Generate Draft (OpenAI)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Image (DALL-E)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Draft (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Callback to Next.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Image (DALL-E)": {
+      "main": [
+        [
+          {
+            "node": "Callback to Next.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

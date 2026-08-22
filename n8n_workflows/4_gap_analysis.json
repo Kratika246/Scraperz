@@ -1,0 +1,95 @@
+{
+  "name": "4. Gap Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gap-analysis",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-gap-analysis",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "gap-analysis-webhook-id"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-YOUR-OPENAI-KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a competitive intelligence AI...\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Analyze this context...\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "ai-node",
+      "name": "AI Gap Analysis (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:3000/api/gap-analysis/callback",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Webhook-Secret",
+              "value": "super_secret_hackathon_key_123"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"report_id\": \"{{ $('Webhook').item.json.body.report_id }}\",\n  \"findings\": {\n    \"gaps\": [\"Missing enterprise security focus\"],\n    \"topics\": [\"Security\", \"Automation\"]\n  },\n  \"competitor_ids\": []\n}",
+        "options": {}
+      },
+      "id": "callback",
+      "name": "Callback to Next.js",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Gap Analysis (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Gap Analysis (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Callback to Next.js",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

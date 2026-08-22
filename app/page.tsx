@@ -47,7 +47,7 @@ export default async function HomePage() {
         <div className="max-w-2xl">
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-full px-4 py-1.5 text-xs font-medium text-primary-300 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse-dot" />
-            Powered by Bright Data & AI
+            Powered by Bright Data
           </div>
 
           <h1 className="text-5xl sm:text-6xl font-bold leading-tight mb-6">
@@ -60,7 +60,7 @@ export default async function HomePage() {
           </h1>
 
           <p className="text-lg text-slate-400 max-w-xl mb-10 leading-relaxed">
-            COMPETE scrapes your competitors&apos; social media, identifies content gaps, 
+            COMPETE scrapes your competitors&apos; social media, identifies content gaps,
             and generates on-brand posts — all while you focus on what matters.
           </p>
 
