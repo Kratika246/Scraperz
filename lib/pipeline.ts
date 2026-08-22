@@ -62,7 +62,11 @@ export async function runDiscoverCompetitors(
   brand: { id: string; tenant_id: string; name?: string; context: unknown }
 ) {
   const industry = (brand.context as { industry?: string })?.industry || 'SaaS';
-  const competitors = await scrapeCompetitors(industry, brand.name);
+  const competitors = await scrapeCompetitors(
+    industry,
+    brand.name,
+    brand.context as Record<string, unknown>
+  );
 
   if (competitors.length > 0) {
     const { error } = await supabase.from('competitors').upsert(
@@ -73,6 +77,7 @@ export async function runDiscoverCompetitors(
         website_url: c.website_url,
         discovery_source: c.discovery_source,
         confidence_score: c.confidence_score,
+        raw_data: c.raw_data ?? null,
         status: 'discovered',
       })),
       { onConflict: 'brand_id,website_url' }
@@ -85,6 +90,7 @@ export async function runDiscoverCompetitors(
     .update({ competitor_discovery_status: 'done' })
     .eq('id', brand.id);
 }
+
 
 export async function runFindHandles(
   supabase: SupabaseClient,

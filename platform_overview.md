@@ -1,17 +1,17 @@
 # Scraperzz — Platform Overview
 
-Scraperzz is a competitive-intelligence and content-ops product. A team adds a brand, Next.js APIs scrape via **Bright Data Scraper Studio collectors**, Groq finds content gaps and drafts posts, and a human approves before anything is queued to publish.
+Scraperzz is a competitive-intelligence and content-ops product. A team adds a brand, Next.js APIs scrape via **Bright Data** (SERP API for competitor discovery, Scraper Studio collectors for everything else), Groq finds content gaps and drafts posts, and a human approves before anything is queued to publish.
 
 **The UI only calls Next.js APIs.** Those APIs do scraping, LLM work, and Supabase writes. **n8n does not scrape or generate.** It only calls `POST /api/jobs/weekly` on a schedule.
 
-**All scraping is Scraper Studio only.** Web Unlocker, SERP zones, and marketplace `dataset_id` scrapers are not used. Each scrape job maps to a collector ID (`c_...`) that you configure later in `.env.local`.
+**Competitor discovery uses the Bright Data SERP API** (`POST https://api.brightdata.com/request` with `brd_json=1`). All other scraping uses Scraper Studio collectors (`c_...`). Web Unlocker and marketplace `dataset_id` scrapers are not used.
 
 ---
 
 ## What it does
 
 1. **Brand context** — Scraper Studio brand-website collector (`{ url }`) returns page text; Groq fills `brands.context`.
-2. **Competitor discovery** — Scraper Studio competitors collector (`{ keyword, industry, brand_name }`); the user approves or rejects each rival.
+2. **Competitor discovery** — Bright Data **SERP API** (`POST /request`, `brd_json=1`): fires two Google searches (`"<brand>" competitors alternatives <industry>` + `best <industry> tools alternative to "<brand>"`), extracts organic results, deduplicates by domain, filters aggregators/social sites, scores by search position. Optional fallback to a Scraper Studio competitors collector if `BRIGHTDATA_COLLECTOR_COMPETITORS` is set.
 3. **Social handles** — Scraper Studio handles collector on the competitor homepage (`{ url }`).
 4. **Posts** — Scraper Studio social-content collector (`{ url, platform }`), with optional LinkedIn / X collector overrides.
 5. **Gap analysis** — Groq compares brand context to scraped posts (no scrape).
@@ -26,7 +26,8 @@ Scraperzz is a competitive-intelligence and content-ops product. A team adds a b
 |---|---|---|
 | App | Next.js 16 + React 19 | UI and all heavy-lifting APIs |
 | Auth + DB | Supabase | Multi-tenant Postgres, Auth, RLS |
-| Scraping | Bright Data **Scraper Studio** | `POST /dca/trigger` + poll `GET /dca/dataset` |
+| Scraping (competitor discovery) | Bright Data **SERP API** | `POST /request` + `brd_json=1` on Google |
+| Scraping (everything else) | Bright Data **Scraper Studio** | `POST /dca/trigger` + poll `GET /dca/dataset` |
 | LLM | Groq (`llama-3.3-70b-versatile`) | Brand extract, gaps, drafts |
 | Images | Pollinations | No API key |
 | Scheduler | n8n | Weekly `POST /api/jobs/weekly` only |
@@ -66,9 +67,10 @@ Copy each collector ID from Scraper Studio (starts with `c_`) into `.env.local`.
 
 | Env var | Used by | Input payload | Flexible output fields |
 |---|---|---|---|
-| `BRIGHTDATA_API_KEY` | All collectors | Bearer token | — |
+| `BRIGHTDATA_API_KEY` | All requests | Bearer token | — |
+| `BRIGHTDATA_SERP_ZONE` | `POST /api/brands/:id/discover-competitors` | SERP API zone name (default: `serp`) | — |
 | `BRIGHTDATA_COLLECTOR_BRAND_WEBSITE` | `POST /api/brands` | `{ url }` | `title`, `description`, `text` / `markdown` (Groq). `raw_html` stored, not sent to the LLM |
-| `BRIGHTDATA_COLLECTOR_COMPETITORS` | Discover competitors | `{ keyword, industry, brand_name }` | `name`, `website_url` / `url` / `link` |
+| `BRIGHTDATA_COLLECTOR_COMPETITORS` | Optional Scraper Studio fallback for discovery | `{ keyword, industry, brand_name }` | `name`, `website_url` / `url` / `link` |
 | `BRIGHTDATA_COLLECTOR_SOCIAL_HANDLES` | Find handles | `{ url }` | `platform`, `handle`, `profile_url` or `linkedin_url`, `twitter_url`, … |
 | `BRIGHTDATA_COLLECTOR_SOCIAL_CONTENT` | Scrape posts | `{ url, platform }` | `post_text` / `text`, `posted_at`, likes/comments |
 | `BRIGHTDATA_COLLECTOR_LINKEDIN_POSTS` | Optional override | `{ url }` | same as social content |
