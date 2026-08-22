@@ -1,94 +1,81 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import TopBar from '@/components/dashboard/TopBar';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge';
 import EmptyState from '@/components/ui/EmptyState';
-import { usePolling } from '@/lib/hooks/usePolling';
 
 export default function CompetitorsPage() {
   const [brand, setBrand] = useState<any>(null);
   const [competitors, setCompetitors] = useState<any[]>([]);
   const [filter, setFilter] = useState<'all' | 'discovered' | 'approved' | 'rejected'>('all');
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('');
 
-  // Load initial data
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const bRes = await fetch('/api/brands');
-        const bData = await bRes.json();
-        const currentBrand = bData.brands?.[0];
-        setBrand(currentBrand);
+  const loadData = useCallback(async () => {
+    const bRes = await fetch('/api/brands');
+    const bData = await bRes.json();
+    const currentBrand = bData.brands?.[0];
+    setBrand(currentBrand);
 
-        if (currentBrand) {
-          const cRes = await fetch(`/api/brands/${currentBrand.id}/competitors`);
-          const cData = await cRes.json();
-          setCompetitors(cData.competitors || []);
-        }
-      } catch (err) {
-        console.error('Failed to load data', err);
-      } finally {
-        setLoading(false);
+    if (currentBrand) {
+      const cRes = await fetch(`/api/brands/${currentBrand.id}/competitors`);
+      const cData = await cRes.json();
+      setCompetitors(cData.competitors || []);
+      if (currentBrand.competitor_discovery_status === 'done') {
+        setIsDiscovering(false);
+        setLoadingMessage('');
       }
     }
-    loadData();
   }, []);
 
-  // No polling needed, API is synchronous now
+  useEffect(() => {
+    loadData().finally(() => setLoading(false));
+  }, [loadData]);
+
+  useEffect(() => {
+    if (!isDiscovering) return;
+    const timer = setInterval(loadData, 2500);
+    return () => clearInterval(timer);
+  }, [isDiscovering, loadData]);
 
   async function handleDiscover() {
     if (!brand) return;
     setIsDiscovering(true);
-    setLoadingMessage('Activating Bright Data Web Unlocker...');
-    
-    // Sequence of messages for the demo
-    const intervals = [
-      setTimeout(() => setLoadingMessage('Searching SERP for competitors...'), 1500),
-      setTimeout(() => setLoadingMessage('Parsing top domains...'), 3000),
-    ];
-
-    try {
-      const res = await fetch(`/api/brands/${brand.id}/discover-competitors`, {
-        method: 'POST',
-      });
-      const data = await res.json();
-      if (data.competitors) {
-          setCompetitors(data.competitors);
-      }
-      setBrand({ ...brand, competitor_discovery_status: 'done' });
-    } catch (err) {
-      console.error('Failed to trigger discovery', err);
-    } finally {
-      intervals.forEach(clearTimeout);
-      setIsDiscovering(false);
-      setLoadingMessage('');
-    }
+    setLoadingMessage('Scraper Studio SERP collector discovering competitors…');
+    await fetch(`/api/brands/${brand.id}/discover-competitors`, { method: 'POST' });
+    await loadData();
   }
 
   async function updateStatus(id: string, status: 'approved' | 'rejected') {
-    // Optimistic update
-    setCompetitors(comps =>
-      comps.map(c => (c.id === id ? { ...c, status } : c))
-    );
-
-    try {
-      await fetch(`/api/competitors/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-    } catch (err) {
-      console.error('Failed to update competitor status', err);
-      // Revert if needed (simplified here)
-    }
+    setCompetitors((comps) => comps.map((c) => (c.id === id ? { ...c, status } : c)));
+    await fetch(`/api/competitors/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
   }
 
-  const filteredCompetitors = competitors.filter(c => {
+  async function findHandles(id: string) {
+    setBusyId(id);
+    await fetch(`/api/competitors/${id}/find-handles`, { method: 'POST' });
+    await loadData();
+    setBusyId(null);
+  }
+
+  async function scrapeContent(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/competitors/${id}/scrape-content`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || 'Scrape failed — find handles first');
+    setBusyId(null);
+  }
+
+  const filteredCompetitors = competitors.filter((c) => {
     if (filter === 'all') return true;
     return c.status === filter;
   });
@@ -101,7 +88,7 @@ export default function CompetitorsPage() {
     <>
       <TopBar
         title="Competitors"
-        subtitle="Review and manage competitors discovered for your brand"
+        subtitle="Review competitors, then pull handles and posts via Scraper Studio"
         actions={
           brand && (
             <div className="flex items-center gap-4">
@@ -124,27 +111,20 @@ export default function CompetitorsPage() {
 
       <div className="p-8 space-y-6">
         {!brand?.context && (
-          <div className="bg-warning-50 border border-warning-200 text-warning-800 p-4 rounded-lg flex items-center gap-3">
-             <svg className="w-5 h-5 text-warning-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <div>
-              <p className="font-medium text-sm">Brand context missing</p>
-              <p className="text-sm">We need to finish scraping your brand website before discovering competitors.</p>
-            </div>
+          <div className="bg-warning-50 border border-warning-200 text-warning-800 p-4 rounded-lg">
+            Brand context missing. Finish website scrape on My Product first.
           </div>
         )}
 
-        {/* Filters */}
         <div className="flex gap-2 border-b border-slate-200 pb-2">
-          {(['all', 'discovered', 'approved', 'rejected'] as const).map(f => (
+          {(['all', 'discovered', 'approved', 'rejected'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 ${
                 filter === f
                   ? 'border-primary-500 text-primary-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  : 'border-transparent text-slate-500'
               }`}
             >
               {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -152,72 +132,71 @@ export default function CompetitorsPage() {
           ))}
         </div>
 
-        {/* Competitor Grid */}
         {filteredCompetitors.length === 0 ? (
           <EmptyState
             title="No competitors found"
-            description={
-              filter === 'all'
-                ? "Click 'Discover competitors' to let our AI find them based on your brand context."
-                : `No competitors in the ${filter} state.`
-            }
-            action={
-               filter === 'all' && brand?.context ? (
-                <Button onClick={handleDiscover}>Find Competitors</Button>
-               ) : null
-            }
+            description="Click Discover competitors to run the Scraper Studio collector through the API."
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-            {filteredCompetitors.map(competitor => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCompetitors.map((competitor) => (
               <Card key={competitor.id} className="flex flex-col h-full">
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">{competitor.name}</h3>
                     {competitor.website_url && (
-                      <a
-                        href={competitor.website_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary-600 hover:underline break-all"
-                      >
-                        {competitor.website_url}
-                      </a>
+                      <p className="text-sm text-primary-600 break-all">{competitor.website_url}</p>
                     )}
                   </div>
-                  <Badge variant={statusToBadgeVariant(competitor.status)}>
-                    {competitor.status}
-                  </Badge>
+                  <Badge variant={statusToBadgeVariant(competitor.status)}>{competitor.status}</Badge>
                 </div>
-                
-                {/* Optional description or confidence score */}
+
                 {competitor.confidence_score && (
-                  <div className="mt-auto pt-4 flex items-center justify-between text-sm text-slate-500">
-                    <span>Relevance score</span>
+                  <div className="pt-2 flex items-center justify-between text-sm text-slate-500">
+                    <span>Relevance</span>
                     <span className="font-medium text-slate-700">
                       {Math.round(competitor.confidence_score * 100)}%
                     </span>
                   </div>
                 )}
 
-                {/* Actions */}
                 <div className="mt-4 flex gap-2 pt-4 border-t border-slate-100">
-                   <Button
-                      variant={competitor.status === 'approved' ? 'primary' : 'secondary'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => updateStatus(competitor.id, 'approved')}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant={competitor.status === 'rejected' ? 'danger' : 'ghost'}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => updateStatus(competitor.id, 'rejected')}
-                    >
-                      Reject
-                    </Button>
+                  <Button
+                    variant={competitor.status === 'approved' ? 'primary' : 'secondary'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => updateStatus(competitor.id, 'approved')}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant={competitor.status === 'rejected' ? 'danger' : 'ghost'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => updateStatus(competitor.id, 'rejected')}
+                  >
+                    Reject
+                  </Button>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    loading={busyId === competitor.id}
+                    onClick={() => findHandles(competitor.id)}
+                  >
+                    Find handles
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    loading={busyId === competitor.id}
+                    onClick={() => scrapeContent(competitor.id)}
+                  >
+                    Scrape posts
+                  </Button>
                 </div>
               </Card>
             ))}

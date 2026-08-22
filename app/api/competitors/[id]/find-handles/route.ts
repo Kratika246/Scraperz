@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { scrapeSocialHandles } from '@/lib/brightdata';
+import { runFindHandles } from '@/lib/pipeline';
 
-// POST /api/competitors/[id]/find-handles
-// Synchronously uses Bright Data (mocked for demo) to find handles
+export const maxDuration = 120;
+
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
@@ -19,7 +19,6 @@ export async function POST(
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
-  // Get competitor details
   const { data: competitor, error } = await supabase
     .from('competitors')
     .select('id, tenant_id, brand_id, name, website_url')
@@ -31,40 +30,32 @@ export async function POST(
   }
 
   if (!competitor.website_url) {
-      return NextResponse.json({ error: 'No website URL to scrape' }, { status: 400 });
+    return NextResponse.json({ error: 'No website URL to scrape' }, { status: 400 });
   }
 
-  // 1. Call Bright Data
-  const handles = await scrapeSocialHandles(competitor.website_url);
-
-  // 2. Insert handles
-  if (handles.length > 0) {
-    const { error: insertError } = await supabase
-      .from('competitor_social_handles')
-      .upsert(
-        handles.map((h) => ({
-          competitor_id: competitor.id,
-          tenant_id: competitor.tenant_id,
-          platform: h.platform,
-          handle: h.handle,
-          profile_url: h.profile_url,
-          verified: h.verified,
-          verification_confidence: h.verification_confidence,
-          status: 'ready'
-        })),
-        { onConflict: 'competitor_id, platform, handle' }
-      );
-
-    if (insertError) {
-      console.error('Failed to insert handles:', insertError);
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
+  try {
+    await runFindHandles(supabase, {
+      id: competitor.id,
+      tenant_id: competitor.tenant_id,
+      website_url: competitor.website_url,
+    });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Handle discovery failed' },
+      { status: 502 }
+    );
   }
 
-  const { data: newHandles } = await supabase
+  const { data: handles } = await supabase
     .from('competitor_social_handles')
     .select('*')
     .eq('competitor_id', id);
 
-  return NextResponse.json({ ok: true, handles: newHandles });
+  return NextResponse.json({
+    ok: true,
+    via: 'api',
+    status: 'done',
+    handles: handles || [],
+  });
 }

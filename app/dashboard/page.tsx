@@ -16,6 +16,15 @@ export default async function DashboardPage() {
     .from('competitors')
     .select('id, status');
 
+  const { count: contentCount } = await supabase
+    .from('competitor_content')
+    .select('id', { count: 'exact', head: true });
+
+  const { count: opportunityCount } = await supabase
+    .from('gap_analysis_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'done');
+
   const brand = brands?.[0];
   const approvedCount = competitors?.filter((c) => c.status === 'approved').length ?? 0;
   const totalCompetitors = competitors?.length ?? 0;
@@ -95,7 +104,7 @@ export default async function DashboardPage() {
                     </svg>
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">—</p>
+                <p className="text-2xl font-bold text-slate-900">{contentCount ?? 0}</p>
                 <p className="text-xs text-slate-400 mt-1">Posts & articles</p>
               </Card>
 
@@ -108,7 +117,7 @@ export default async function DashboardPage() {
                     </svg>
                   </div>
                 </div>
-                <p className="text-2xl font-bold text-slate-900">—</p>
+                <p className="text-2xl font-bold text-slate-900">{opportunityCount ?? 0}</p>
                 <p className="text-xs text-slate-400 mt-1">Content gaps found</p>
               </Card>
             </div>

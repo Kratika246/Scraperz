@@ -12,9 +12,13 @@ export default function IntelligencePage() {
 
   useEffect(() => {
     async function loadData() {
-      // In a real app, this would fetch from an API route that queries `competitor_content`.
-      // For the hackathon, we'll simulate fetching all content for the tenant.
-      setLoading(false);
+      try {
+        const res = await fetch('/api/intelligence');
+        const data = await res.json();
+        setContent(data.content || []);
+      } finally {
+        setLoading(false);
+      }
     }
     loadData();
   }, []);
@@ -27,18 +31,33 @@ export default function IntelligencePage() {
     <>
       <TopBar
         title="Intelligence"
-        subtitle="Recent posts and articles from your competitors"
+        subtitle="Recent posts scraped from competitor handles"
       />
 
       <div className="p-8">
         {content.length === 0 ? (
           <EmptyState
             title="No intelligence data yet"
-            description="Content will appear here once you've discovered competitors and their social handles have been scraped."
+            description="On Competitors, approve a rival, then use Find handles and Scrape posts."
           />
         ) : (
           <div className="space-y-6 max-w-4xl">
-            {/* Feed items will go here */}
+            {content.map((item) => (
+              <Card key={item.id}>
+                <div className="flex items-center justify-between mb-3">
+                  <Badge variant="info">{item.platform}</Badge>
+                  <span className="text-xs text-slate-400">
+                    {item.posted_at ? new Date(item.posted_at).toLocaleString() : ''}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-800 leading-relaxed">{item.text}</p>
+                {item.engagement_metrics && (
+                  <p className="text-xs text-slate-500 mt-3">
+                    {item.engagement_metrics.likes || 0} likes · {item.engagement_metrics.comments || 0} comments
+                  </p>
+                )}
+              </Card>
+            ))}
           </div>
         )}
       </div>

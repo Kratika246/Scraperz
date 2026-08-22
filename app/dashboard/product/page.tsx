@@ -4,6 +4,7 @@ import TopBar from '@/components/dashboard/TopBar';
 import Card from '@/components/ui/Card';
 import Badge, { statusToBadgeVariant } from '@/components/ui/Badge';
 import Link from 'next/link';
+import BrandStatusPoller from '@/components/dashboard/BrandStatusPoller';
 
 export default async function ProductPage() {
   const supabase = await createClient();
@@ -24,6 +25,7 @@ export default async function ProductPage() {
 
   return (
     <>
+      <BrandStatusPoller brandId={brand.id} status={brand.status} />
       <TopBar
         title="My Product"
         subtitle="Your brand context powers competitor discovery and content generation"
