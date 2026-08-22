@@ -151,21 +151,38 @@ export function configuredCollectors() {
   );
 }
 
-export async function scrapeBrandWebsite(websiteUrl: string) {
-  const rows = await runStudioCollector(COLLECTORS.brandWebsite, 'BRIGHTDATA_COLLECTOR_BRAND_WEBSITE', [
-    { url: websiteUrl },
-  ]);
-  const row = rows[0] || {};
-  const title = str(row, 'title');
-  const description = str(row, 'description');
-  const body = str(row, 'text', 'markdown', 'content', 'body', 'page_text');
-  // Prefer readable fields. Never send raw_html to the LLM — it is scripts/CSS noise.
-  const text = [title && `Title: ${title}`, description && `Description: ${description}`, body]
-    .filter(Boolean)
-    .join('\n\n')
-    .slice(0, 12000);
-  const raw = str(row, 'raw_html', 'html') || JSON.stringify({ url: str(row, 'url'), title, description });
-  return { raw, text, rows, title, description };
+// lib/brightdata.ts
+export async function scrapeBrandWebsite(url: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout limit
+
+  try {
+    const res = await fetch(
+      `https://api.brightdata.com/dca/trigger?collector=${process.env.BRIGHTDATA_COLLECTOR_BRAND_WEBSITE}&queue_next=1`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.BRIGHTDATA_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify([{ url }]),
+        signal: controller.signal,
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!res.ok) throw new Error(`Bright Data API error: ${res.statusText}`);
+    
+    const data = await res.json();
+    return {
+      text: data[0]?.text || data[0]?.markdown || '',
+      raw: data[0]?.raw_html || data[0]?.html || '',
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
 }
 
 export async function scrapeCompetitors(industry: string, brandName?: string) {

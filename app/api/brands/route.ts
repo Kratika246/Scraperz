@@ -35,35 +35,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
   }
 
-  const { data: brand, error } = await supabase
-    .from('brands')
-    .insert({
-      tenant_id: profile.tenant_id,
-      name,
-      website_url,
-      raw_description,
-      status: 'scraping',
-    })
-    .select()
-    .single();
+// Insert record with status 'pending' or 'scraping'
+const { data: brand, error } = await supabase
+  .from('brands')
+  .insert({
+    tenant_id: profile.tenant_id,
+    name,
+    website_url,
+    raw_description,
+    status: 'scraping',
+  })
+  .select()
+  .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  try {
-    await runBrandScrape(supabase, brand);
-  } catch (err) {
-    console.error('Brand scrape failed:', err);
-    await supabase.from('brands').update({ status: 'failed' }).eq('id', brand.id);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Brand scrape failed', brand_id: brand.id },
-      { status: 502 }
-    );
-  }
+// Process in background - DO NOT await here
+runBrandScrape(supabase, brand).catch(async (err) => {
+  console.error('Background scrape error:', err);
+  await supabase.from('brands').update({ status: 'failed' }).eq('id', brand.id);
+});
 
-  const { data: ready } = await supabase.from('brands').select('*').eq('id', brand.id).single();
-  return NextResponse.json({ brand: ready, via: 'api' }, { status: 201 });
+// Return immediately to frontend
+return NextResponse.json({ brand, via: 'api' }, { status: 201 });
 }
 
 export async function GET() {
