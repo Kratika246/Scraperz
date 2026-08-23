@@ -1,11 +1,11 @@
 /**
  * lib/image-gen.ts
  *
- * Image generation with a quality-first cascade:
- *  1. Gemini native image models (free tier; often quota-limited)
- *  2. Hugging Face FLUX.1-schnell when HF_TOKEN is set
- *  3. Together AI FLUX.1-schnell when TOGETHER_API_KEY is set
- *  4. AI Horde Realistic Vision (no extra key; photorealistic, not Pollinations)
+ * Image generation with a free-first cascade:
+ *  1. Pollinations AI (no API key)
+ *  2. AI Horde Realistic Vision (no API key)
+ *  3. Hugging Face FLUX.1-schnell when HF_TOKEN is set
+ *  4. Together AI FLUX.1-schnell when TOGETHER_API_KEY is set
  *
  * Returns a data URI on success, or null so callers can degrade gracefully.
  */
@@ -15,13 +15,6 @@ export type ImageGenResult = {
   mimeType: string;
   model: string;
 };
-
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_IMAGE_MODELS = [
-  'gemini-2.5-flash-image',
-  'gemini-3.1-flash-lite-image',
-  'gemini-3.1-flash-image',
-];
 
 const HF_FLUX_URL =
   'https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell';
@@ -39,57 +32,38 @@ function mimeFromResponse(res: Response, fallback: string): string {
   return raw.split(';')[0].trim() || fallback;
 }
 
-async function tryGemini(prompt: string, apiKey: string): Promise<ImageGenResult | null> {
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-  });
+function pollinationsImageUrl(prompt: string): string {
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(
+    prompt
+  )}?nologo=true&width=1024&height=1024`;
+}
 
-  for (const model of GEMINI_IMAGE_MODELS) {
-    try {
-      const res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: AbortSignal.timeout(30000),
-      });
+async function tryPollinations(prompt: string): Promise<ImageGenResult | null> {
+  const url = pollinationsImageUrl(prompt);
 
-      if (res.status === 429) {
-        console.warn(`[IMAGE-GEN] Gemini ${model} quota exceeded; trying next provider.`);
-        return null;
-      }
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(90000) });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        console.warn(`[IMAGE-GEN] Gemini ${model} HTTP ${res.status}:`, errText.slice(0, 280));
-        continue;
-      }
-
-      const json = await res.json();
-      const parts: Array<{ inlineData?: { mimeType: string; data: string } }> =
-        json?.candidates?.[0]?.content?.parts ?? [];
-
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          const mimeType = part.inlineData.mimeType || 'image/png';
-          return {
-            dataUri: `data:${mimeType};base64,${part.inlineData.data}`,
-            mimeType,
-            model,
-          };
-        }
-      }
-
-      console.warn(`[IMAGE-GEN] Gemini ${model} returned no image part.`);
-    } catch (err) {
-      console.warn(
-        `[IMAGE-GEN] Gemini ${model} failed:`,
-        err instanceof Error ? err.message : err
-      );
+    if (!res.ok) {
+      console.warn(`[IMAGE-GEN] Pollinations HTTP ${res.status}:`, (await res.text()).slice(0, 280));
+      return null;
     }
-  }
 
-  return null;
+    const mimeType = mimeFromResponse(res, 'image/jpeg');
+    if (!mimeType.startsWith('image/')) {
+      console.warn('[IMAGE-GEN] Pollinations returned non-image payload.');
+      return null;
+    }
+
+    return {
+      dataUri: bytesToDataUri(await res.arrayBuffer(), mimeType),
+      mimeType,
+      model: 'pollinations/flux',
+    };
+  } catch (err) {
+    console.warn('[IMAGE-GEN] Pollinations failed:', err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 async function tryHuggingFaceFlux(prompt: string, token: string): Promise<ImageGenResult | null> {
@@ -275,23 +249,13 @@ async function tryHorde(prompt: string): Promise<ImageGenResult | null> {
   }
 }
 
-/**
- * Generate an image from a text prompt.
- *
- * @param prompt - Descriptive text prompt for the image
- * @param apiKey - Optional Gemini API key (defaults to GEMINI_API_KEY)
- */
-export async function generateImage(
-  prompt: string,
-  apiKey?: string
-): Promise<ImageGenResult | null> {
-  const geminiKey = (apiKey || process.env.GEMINI_API_KEY || '').trim();
-  if (geminiKey) {
-    const gemini = await tryGemini(prompt, geminiKey);
-    if (gemini) return gemini;
-  } else {
-    console.warn('[IMAGE-GEN] GEMINI_API_KEY is not set; skipping Gemini.');
-  }
+/** Generate an image from a text prompt using free providers first. */
+export async function generateImage(prompt: string): Promise<ImageGenResult | null> {
+  const pollinations = await tryPollinations(prompt);
+  if (pollinations) return pollinations;
+
+  const horde = await tryHorde(prompt);
+  if (horde) return horde;
 
   const hfToken = (process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY || '').trim();
   if (hfToken) {
@@ -305,9 +269,8 @@ export async function generateImage(
     if (together) return together;
   }
 
-  const horde = await tryHorde(prompt);
-  if (horde) return horde;
-
   console.error('[IMAGE-GEN] All image providers failed.');
   return null;
 }
+
+export { pollinationsImageUrl };

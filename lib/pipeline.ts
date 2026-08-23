@@ -368,7 +368,7 @@ Requirements for ${platform}:
     ? `Professional blog header illustration about ${input.topic}, sleek modern tech design, clean corporate graphics`
     : `Professional social media graphic about ${input.topic}, modern corporate design, clean graphics`;
 
-  // Generate a real image (Gemini → FLUX → AI Horde). Empty array if all fail.
+  // Generate a real image (Pollinations → AI Horde → optional FLUX). Empty array if all fail.
   let generated_image_urls: string[] = [];
   const imgResult = await generateImage(imagePrompt);
   if (imgResult?.dataUri) {

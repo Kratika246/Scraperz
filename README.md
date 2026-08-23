@@ -20,7 +20,7 @@ The project documentation is split into modular topics. Explore the dedicated gu
 |---|---|
 | 🏗️ [**Architecture & System Design**](docs/ARCHITECTURE.md) | High-level topology, component lifecycles, data flow diagrams, and architectural principles. |
 | 🛡️ [**Self-Healing Scraper Engine**](docs/SELF_HEALING_SCRAPING.md) | The 5-tier resilience hierarchy ("Into the Scrape-Verse"), AI DOM structural repair, and telemetry. |
-| 🎨 [**Image Generation (Free API vs NanoBanana)**](docs/IMAGE_GENERATION.md) | Details on Pollinations AI (free tier) and NanoBanana (production tier), code setup, and prompt strategy. |
+| 🎨 [**Image Generation (Pollinations & Premium Models)**](docs/IMAGE_GENERATION.md) | Details on Pollinations AI (free default) and upgrading to premium models (NanoBanana, Flux Pro) for higher fidelity. |
 | 🔌 [**REST API Reference**](docs/API_REFERENCE.md) | Comprehensive endpoints guide for Brands, Competitors, Intelligence, Approvals, and Jobs. |
 | 🗄️ [**Database Schema & ERD**](docs/DATABASE_SCHEMA.md) | Multi-tenant PostgreSQL table definitions, constraints, relationships, and RLS policies. |
 | 🚀 [**Setup & Deployment Guide**](docs/SETUP_GUIDE.md) | Step-by-step local setup, environment variables, Supabase migrations, and Docker n8n configuration. |
@@ -49,7 +49,7 @@ COMPETE automates the competitive intelligence loop for modern marketing and gro
 3. **Multi-Source Scraping**: Scrapes competitor LinkedIn posts, X posts, and blog articles.
 4. **Autonomous Self-Healing**: Resilient 5-tier scraper engine (`lib/self_healing.ts`) with dynamic AI DOM recovery if target page structures change.
 5. **Gap Analysis**: Groq compares your brand against competitor feeds to uncover unmet topics and formats.
-6. **Multi-Format Content Generation**: Generates SEO-ready Markdown Blog Articles and Social Posts paired with AI-generated graphics ([Pollinations AI / NanoBanana](docs/IMAGE_GENERATION.md)).
+6. **Multi-Format Content Generation**: Generates SEO-ready Markdown Blog Articles and Social Posts paired with AI-generated graphics ([Pollinations AI / Premium Models](docs/IMAGE_GENERATION.md)).
 7. **Human-in-the-Loop Review**: Approve, reject, or annotate drafts in the Approval Center before automated queue publishing.
 
 ---

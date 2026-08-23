@@ -6,7 +6,7 @@ import { generateImage } from '@/lib/image-gen';
  * POST /api/image-gen
  * Body: { prompt: string }
  *
- * Generates an image (Gemini, then FLUX, then AI Horde) and returns a
+ * Generates an image (Pollinations, then AI Horde, then optional FLUX) and returns a
  * data URI that can be stored in generated_content.generated_image_urls[].
  */
 export async function POST(req: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Image generation failed. Gemini quota may be exhausted and fallbacks also failed.',
+        error: 'Image generation failed. Pollinations and all fallbacks also failed.',
       },
       { status: 502 }
     );
