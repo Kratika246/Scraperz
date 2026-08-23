@@ -79,6 +79,18 @@ export default function CompetitorsPage() {
     setBusyId(null);
   }
 
+  async function scrapeBlog(id: string) {
+    setBusyId(id);
+    const res = await fetch(`/api/competitors/${id}/scrape-blog`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Blog scrape failed');
+    } else {
+      alert(`Scraped ${data.scraped_count || 0} blog post(s) from ${data.blog_url}`);
+    }
+    setBusyId(null);
+  }
+
   const filteredCompetitors = competitors.filter((c) => {
     if (filter === 'all') return true;
     return c.status === filter;
@@ -92,7 +104,7 @@ export default function CompetitorsPage() {
     <>
       <TopBar
         title="Competitors"
-        subtitle="Review competitors, then pull handles and posts via Scraper Studio"
+        subtitle="Review competitors, then pull handles, posts, and blogs via Bright Data"
         actions={
           brand && (
             <div className="flex items-center gap-4">
@@ -202,11 +214,11 @@ export default function CompetitorsPage() {
                     Reject
                   </Button>
                 </div>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex-1"
+                    className="text-xs px-2"
                     loading={busyId === competitor.id}
                     onClick={() => findHandles(competitor.id)}
                   >
@@ -215,11 +227,20 @@ export default function CompetitorsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex-1"
+                    className="text-xs px-2"
                     loading={busyId === competitor.id}
                     onClick={() => scrapeContent(competitor.id)}
                   >
                     Scrape posts
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs px-2"
+                    loading={busyId === competitor.id}
+                    onClick={() => scrapeBlog(competitor.id)}
+                  >
+                    Scrape blog
                   </Button>
                 </div>
               </Card>

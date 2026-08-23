@@ -1,5 +1,6 @@
 import { chatJson, chatText, pollinationsImageUrl } from '@/lib/llm';
 import {
+  scrapeBrandBlog,
   scrapeBrandWebsite,
   scrapeCompetitors,
   scrapeSocialContent,
@@ -92,6 +93,11 @@ export async function runDiscoverCompetitors(
 }
 
 
+/** Platforms allowed by the DB check constraint on competitor_social_handles. */
+const VALID_PLATFORMS = new Set([
+  'instagram', 'twitter', 'linkedin', 'youtube', 'tiktok', 'facebook', 'other',
+]);
+
 export async function runFindHandles(
   supabase: SupabaseClient,
   competitor: { id: string; tenant_id: string; website_url: string }
@@ -99,8 +105,25 @@ export async function runFindHandles(
   const handles = await scrapeSocialHandles(competitor.website_url);
   if (handles.length === 0) return;
 
+  // Normalize platforms to the DB-allowed set, filter invalid rows, deduplicate
+  const seen = new Set<string>();
+  const rows = handles
+    .map((h) => ({
+      ...h,
+      platform: VALID_PLATFORMS.has(h.platform) ? h.platform : 'other',
+    }))
+    .filter((h) => {
+      if (!h.handle || !h.profile_url) return false;
+      const key = `${h.platform}::${h.handle}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  if (rows.length === 0) return;
+
   const { error } = await supabase.from('competitor_social_handles').upsert(
-    handles.map((h) => ({
+    rows.map((h) => ({
       competitor_id: competitor.id,
       tenant_id: competitor.tenant_id,
       platform: h.platform,
@@ -122,7 +145,16 @@ export async function runScrapeContent(
 ) {
   const rows = [];
   for (const handle of handles) {
-    const content = await scrapeSocialContent(handle.profile_url, handle.platform);
+    let content: Awaited<ReturnType<typeof scrapeSocialContent>> = [];
+    try {
+      content = await scrapeSocialContent(handle.profile_url, handle.platform);
+    } catch (err) {
+      console.warn(
+        `Skipping content scrape for ${handle.platform} (${handle.profile_url}):`,
+        err instanceof Error ? err.message : err
+      );
+      continue; // skip this handle, keep processing the rest
+    }
     for (const item of content) {
       rows.push({
         competitor_id: competitor.id,
@@ -137,6 +169,35 @@ export async function runScrapeContent(
       });
     }
   }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('competitor_content').insert(rows);
+    if (error) throw new Error(error.message);
+  }
+
+  return rows.length;
+}
+
+// lib/pipeline.ts — runScrapeBlog helper for blog post scraping
+export async function runScrapeBlog(
+  supabase: SupabaseClient,
+  competitor: { id: string; tenant_id: string },
+  blogUrl: string
+) {
+  const posts = await scrapeBrandBlog(blogUrl);
+
+  const rows = posts.map((p) => ({
+    competitor_id: competitor.id,
+    tenant_id: competitor.tenant_id,
+    handle_id: null,
+    platform: 'blog',
+    content_type: 'blog_post',
+    title: p.title,
+    text: p.text.slice(0, 2000),
+    media_urls: [],
+    posted_at: p.posted_at,
+    engagement_metrics: { likes: 0, comments: 0, shares: 0 },
+  }));
 
   if (rows.length > 0) {
     const { error } = await supabase.from('competitor_content').insert(rows);
@@ -250,6 +311,14 @@ export async function runWeeklyJob(supabase: SupabaseClient) {
           website_url: competitor.website_url,
         });
         steps.push(`handles:${competitor.name}`);
+
+        try {
+          const blogUrl = competitor.website_url.replace(/\/+$/, '') + '/blog';
+          const nb = await runScrapeBlog(supabase, competitor, blogUrl);
+          steps.push(`blog:${competitor.name}:${nb}`);
+        } catch {
+          /* ignore blog errors during automated weekly run */
+        }
       }
 
       const { data: handles } = await supabase

@@ -644,10 +644,164 @@ function contentCollectorFor(platform: string, profileUrl: string) {
   return { id: COLLECTORS.socialContent, env: 'BRIGHTDATA_COLLECTOR_SOCIAL_CONTENT' };
 }
 
+export async function scrapeLinkedInPostsByCompanyUrl(
+  companyUrl: string
+): Promise<Record<string, unknown>[]> {
+  requireKey();
+
+  const datasetId = COLLECTORS.linkedinPosts;
+  if (!datasetId) {
+    throw new Error(
+      'BRIGHTDATA_COLLECTOR_LINKEDIN_POSTS is not set. Configure it in .env.local with the LinkedIn posts dataset ID (gd_...).'
+    );
+  }
+
+  const params = new URLSearchParams({
+    dataset_id: datasetId,
+    notify: 'false',
+    include_errors: 'true',
+    type: 'discover_new',
+    discover_by: 'company_url',
+  });
+
+  const res = await fetch(`https://api.brightdata.com/datasets/v3/scrape?${params.toString()}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: [{ url: companyUrl }],
+      limit_per_input: 20,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`LinkedIn posts dataset scrape ${res.status}: ${text.slice(0, 400)}`);
+  }
+
+  // Response is NDJSON: one JSON object per line, not a single JSON array.
+  const rows: Record<string, unknown>[] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      rows.push(JSON.parse(trimmed));
+    } catch {
+      // skip malformed lines rather than failing the whole batch
+      console.warn('Skipping unparseable LinkedIn posts line:', trimmed.slice(0, 200));
+    }
+  }
+
+  return rows;
+}
+
+export async function scrapeXPostsByProfileUrl(
+  profileUrl: string,
+  opts: { startDate?: string; endDate?: string } = {}
+): Promise<Record<string, unknown>[]> {
+  requireKey();
+
+  const datasetId = COLLECTORS.xPosts;
+  if (!datasetId) {
+    throw new Error(
+      'BRIGHTDATA_COLLECTOR_X_POSTS is not set. Configure it in .env.local with the X posts dataset ID (gd_...).'
+    );
+  }
+
+  const params = new URLSearchParams({
+    dataset_id: datasetId,
+    notify: 'false',
+    include_errors: 'true',
+    type: 'discover_new',
+    discover_by: 'profile_url',
+  });
+
+  const res = await fetch(`https://api.brightdata.com/datasets/v3/scrape?${params.toString()}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: [
+        {
+          url: profileUrl,
+          start_date: opts.startDate || '',
+          end_date: opts.endDate || '',
+        },
+      ],
+      limit_per_input: 20,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`X posts dataset scrape ${res.status}: ${text.slice(0, 400)}`);
+  }
+
+  // Same NDJSON response format as LinkedIn posts — one JSON object per line.
+  const rows: Record<string, unknown>[] = [];
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      rows.push(JSON.parse(trimmed));
+    } catch {
+      console.warn('Skipping unparseable X posts line:', trimmed.slice(0, 200));
+    }
+  }
+
+  return rows;
+}
+
 export async function scrapeSocialContent(profileUrl: string, platform: string) {
+  const p = platform.toLowerCase();
+
+  if (p === 'linkedin' || /linkedin\.com/i.test(profileUrl)) {
+    const rows = await scrapeLinkedInPostsByCompanyUrl(profileUrl);
+    return rows
+      .map((row) => ({
+        platform: 'linkedin',
+        content_type: (str(row, 'content_type') || 'post') as string,
+        text: str(row, 'post_text', 'text', 'title').slice(0, 2000),
+        media_urls: (row.media_urls as string[]) || (row.images as string[]) || [],
+        posted_at: str(row, 'posted_at', 'date_posted', 'created_at') || new Date().toISOString(),
+        engagement_metrics: {
+          likes: num(row, 'likes', 'num_likes'),
+          comments: num(row, 'comments', 'num_comments'),
+          shares: num(row, 'shares', 'num_shares', 'reposts'),
+        },
+      }))
+      .filter((item) => item.text);
+  }
+
+  if (p === 'twitter' || /twitter\.com|x\.com/i.test(profileUrl)) {
+    const rows = await scrapeXPostsByProfileUrl(profileUrl);
+    return rows
+      .map((row) => ({
+        platform: 'twitter',
+        content_type: (str(row, 'content_type') || 'post') as string,
+        text: str(row, 'post_text', 'text', 'tweet_text', 'description', 'title').slice(0, 2000),
+        media_urls: (row.media_urls as string[]) || (row.images as string[]) || [],
+        posted_at: str(row, 'posted_at', 'date_posted', 'created_at', 'date') || new Date().toISOString(),
+        engagement_metrics: {
+          likes: num(row, 'likes', 'num_likes', 'favorite_count'),
+          comments: num(row, 'comments', 'num_comments', 'reply_count'),
+          shares: num(row, 'shares', 'num_shares', 'retweet_count'),
+        },
+      }))
+      .filter((item) => item.text);
+  }
+
+  // Everything else: existing Scraper Studio path
   const { id, env } = contentCollectorFor(platform, profileUrl);
   const rows = await runStudioCollector(id, env, [{ url: profileUrl, platform }]);
-
   return rows
     .map((row) => ({
       platform,
@@ -662,4 +816,89 @@ export async function scrapeSocialContent(profileUrl: string, platform: string) 
       },
     }))
     .filter((item) => item.text);
+}
+
+/**
+ * Scrape a brand/competitor's blog listing page, discover recent post links,
+ * then fetch each post's content. Reuses the BRAND_WEBSITE collector — no
+ * new Bright Data product or auth scheme needed.
+ */
+export async function scrapeBrandBlog(
+  blogUrl: string,
+  maxPosts = 8
+): Promise<{ title: string; url: string; text: string; posted_at: string }[]> {
+  // 1. Fetch the listing page's raw HTML via your existing BRAND_WEBSITE collector
+  const listing = await scrapeBrandWebsite(blogUrl);
+  const $ = cheerio.load(listing.raw || '');
+  const base = new URL(blogUrl);
+
+  // 2. Heuristically find post links: prefer <article> wrappers, fall back to
+  //    any link whose path starts with the blog's own path prefix (e.g. /blog/)
+  const candidates = new Map<string, string>(); // url -> title
+
+  const blogPathPrefix = base.pathname.replace(/\/+$/, ''); // e.g. "/blog"
+
+  $('article a[href], [class*="post"] a[href], [class*="card"] a[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
+    try {
+      const url = href.startsWith('http') ? new URL(href) : new URL(href, blogUrl);
+      if (url.pathname === base.pathname) return; // skip link back to listing itself
+      if (blogPathPrefix && !url.pathname.startsWith(blogPathPrefix)) return;
+      const title = $(el).text().trim() || $(el).find('h1,h2,h3').first().text().trim();
+      if (!candidates.has(url.href) || title) {
+        candidates.set(url.href, title || candidates.get(url.href) || '');
+      }
+    } catch {
+      /* skip invalid URLs */
+    }
+  });
+
+  // Fallback: any link under the blog path prefix, if the article-scoped search found nothing
+  if (candidates.size === 0 && blogPathPrefix) {
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr('href');
+      if (!href) return;
+      try {
+        const url = href.startsWith('http') ? new URL(href) : new URL(href, blogUrl);
+        if (url.pathname === base.pathname) return;
+        if (!url.pathname.startsWith(blogPathPrefix)) return;
+        if (url.pathname.split('/').filter(Boolean).length <= blogPathPrefix.split('/').filter(Boolean).length) return; // skip category/tag pages at same depth
+        const title = $(el).text().trim();
+        candidates.set(url.href, title || candidates.get(url.href) || '');
+      } catch {
+        /* skip */
+      }
+    });
+  }
+
+  const postUrls = Array.from(candidates.entries()).slice(0, maxPosts);
+
+  // 3. Fetch each post individually for full text
+  const posts: { title: string; url: string; text: string; posted_at: string }[] = [];
+  for (const [url, titleGuess] of postUrls) {
+    try {
+      const post = await scrapeBrandWebsite(url);
+      const $$ = cheerio.load(post.raw || '');
+      const title =
+        titleGuess ||
+        $$('h1').first().text().trim() ||
+        $$('title').first().text().trim() ||
+        url;
+      const text = (post.text || $$('article').text() || $$('main').text() || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 3000);
+      const posted_at =
+        $$('time').attr('datetime') ||
+        $$('meta[property="article:published_time"]').attr('content') ||
+        new Date().toISOString();
+
+      if (text) posts.push({ title, url, text, posted_at });
+    } catch (err) {
+      console.warn(`Skipping blog post ${url}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  return posts;
 }
