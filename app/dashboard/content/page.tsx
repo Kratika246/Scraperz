@@ -175,12 +175,25 @@ export default function ContentPage() {
                       {item.draft_text?.replace(/^#\s+.+\n+/, '')}
                     </p>
 
-                    <button
-                      onClick={() => setReadingItem(item)}
-                      className="text-xs font-bold text-primary-600 hover:text-primary-700 hover:underline mt-3 inline-flex items-center gap-1"
-                    >
-                      <span>Read full {isBlog ? 'article' : 'post'} →</span>
-                    </button>
+                    <div className="flex items-center justify-between gap-2 mt-3">
+                      <button
+                        onClick={() => setReadingItem(item)}
+                        className="text-xs font-bold text-primary-600 hover:text-primary-700 hover:underline inline-flex items-center gap-1"
+                      >
+                        <span>Read full {isBlog ? 'article' : 'post'} →</span>
+                      </button>
+
+                      {item.published_url && (
+                        <a
+                          href={item.published_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md transition inline-flex items-center gap-1"
+                        >
+                          <span>🔗 Live Post ↗</span>
+                        </a>
+                      )}
+                    </div>
 
                     {item.generated_image_urls?.[0] && (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -210,6 +223,16 @@ export default function ContentPage() {
                 <Badge variant={statusToBadgeVariant(readingItem.status)}>
                   {readingItem.status}
                 </Badge>
+                {readingItem.published_url && (
+                  <a
+                    href={readingItem.published_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg ml-2 hover:bg-emerald-100 transition"
+                  >
+                    🔗 View Live Post ↗
+                  </a>
+                )}
               </div>
               <button
                 onClick={() => setReadingItem(null)}

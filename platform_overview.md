@@ -14,7 +14,7 @@ Scraperzz is a competitive-intelligence and content-ops product. A team adds a b
 4. **Competitor content & blog scraping** — Scrapes competitor social posts (LinkedIn datasets, X datasets) and blog articles (`scrapeBrandBlog` / `runScrapeBlog`), inserting into `competitor_content`.
 5. **Gap analysis** — Groq compares brand context against collected competitor posts & blog articles to uncover content gaps, strategic positioning insights, recommended topics, and target content formats.
 6. **Multi-format content generation** — Groq generates high-quality **Blog Articles** (structured markdown with H1, executive summary, key sections, takeaways, CTA) and **Social Posts** (LinkedIn, Twitter/X, Instagram, Facebook) paired with Pollinations graphic headers.
-7. **Approval & publishing** — Human review in Approval Center; `POST /api/publish` queues Buffer (or local queue).
+7. **Approval, Buffer integration & publishing** — Configure Buffer Access Token on `/dashboard/settings`. System retrieves live connected channels (`fetchBufferProfiles`), allows target channel selection in Approval Center, dispatches approved LinkedIn & X posts to Buffer API (`postToBuffer`), reconciles status, and displays live `🔗 View Live Post` permalinks across the UI.
 
 ---
 
@@ -37,6 +37,7 @@ Scraperzz features an **Autonomous Self-Healing Scraper Engine** (`lib/self_heal
 |---|---|---|
 | App | Next.js 16 + React 19 | UI and heavy-lifting APIs |
 | Auth + DB | Supabase | Multi-tenant Postgres, Auth, RLS |
+| Publishing | **Buffer GraphQL API** (`api.buffer.com`) | Channel fetching & post dispatch mutations |
 | Scraping (competitor discovery) | Bright Data **SERP API** | `POST /request` + `brd_json=1` on Google |
 | Scraping (social content & datasets) | Bright Data Datasets & Scraper Studio | LinkedIn (`gd_...`), X (`gd_...`), Brand website & handles |
 | Scraping (blog articles) | Bright Data + Cheerio | Blog listing link discovery & article extraction (`scrapeBrandBlog`) |

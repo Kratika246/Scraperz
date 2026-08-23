@@ -44,7 +44,7 @@ export async function GET() {
       'POST /api/competitors/:id/find-handles — Scraper Studio social-handles collector',
       'POST /api/competitors/:id/scrape-content — Scraper Studio social-content collector',
       'POST /api/brands/:id/analyze-gaps — Groq',
-      'POST /api/brands/:id/generate-content — Groq + Pollinations',
+      'POST /api/brands/:id/generate-content — Groq + Gemini Image (Nano Banana)',
       'POST /api/publish — Buffer or queued job',
       'POST /api/jobs/weekly — n8n-only trigger; same pipeline as the UI APIs',
     ],

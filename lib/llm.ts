@@ -11,9 +11,6 @@ export const llm = new OpenAI({
 export const LLM_MODEL =
   process.env.LLM_MODEL || 'openai/gpt-oss-120b';
 
-export function pollinationsImageUrl(prompt: string) {
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?nologo=true&width=1024&height=1024`;
-}
 
 export async function chatJson<T>(system: string, user: string, fallback?: T): Promise<T> {
   try {
