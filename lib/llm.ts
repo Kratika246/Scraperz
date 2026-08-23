@@ -44,6 +44,7 @@ export async function chatText(prompt: string, fallback?: string): Promise<strin
     const response = await llm.chat.completions.create({
       model: LLM_MODEL,
       temperature: 0.7,
+      max_tokens: 3000,
       messages: [{ role: 'user', content: prompt }],
     });
     const content = response.choices[0]?.message?.content?.trim();

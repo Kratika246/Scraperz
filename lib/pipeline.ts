@@ -288,39 +288,56 @@ export async function runGenerateContent(
   let fallbackText = '';
 
   if (isBlog) {
-    userPrompt = `Write a comprehensive, engaging, SEO-optimized blog article about "${input.topic}".
+    userPrompt = `Write an in-depth, highly comprehensive, SEO-optimized blog article about "${input.topic}".
 Target Audience: ${targetAudience}
 Tone: ${tone.join(', ') || 'professional, authoritative, and practical'}
 Brand Context: ${JSON.stringify(input.brand.context)}
 
-Structure requirements:
-- Clean Markdown title heading (# Title)
-- Brief Executive Summary (2-3 sentences)
-- 3 core sections with clear subheadings (## Section Title)
-- Bulleted list of Key Takeaways
-- Actionable Conclusion and CTA
+Structure & Content Requirements:
+- Title heading (# Title)
+- Executive Summary (3-4 detailed sentences outlining the core thesis and strategic value)
+- 4 detailed, multi-paragraph core sections with subheadings (## 1. Section Title, ## 2. Section Title, ## 3. Section Title, ## 4. Section Title)
+- Under each section, write 2 to 3 thorough paragraphs explaining the concept, real-world context, technical considerations, and step-by-step implementation.
+- Include a practical bulleted list of Key Takeaways.
+- Conclude with an Actionable Summary and Call to Action (CTA).
 
-Length: 350-500 words. Format in clean Markdown.`;
+Length: 700 to 1100 words. Write full, detailed paragraphs. Do NOT write a brief summary or placeholder outline. Format cleanly in Markdown.`;
 
     fallbackText = `# ${input.topic}
 
 ## Executive Summary
-In today's fast-evolving landscape, staying ahead requires strategic execution. This article breaks down actionable insights for ${targetAudience}.
+In today's fast-evolving landscape, engineering and product teams face unprecedented friction from context-switching and fragmented toolchains. Modern teams that prioritize workflow speed and intuitive UI design drastically reduce cognitive load, enabling engineers to maintain flow state and deliver high-impact features faster. This guide explores how streamlined interfaces drive measurable productivity gains.
 
-## 1. Understanding the Strategic Edge
-Modern growth relies on actionable intelligence. By identifying content gaps and understanding competitor positioning, teams can craft messaging that truly resonates.
+## 1. The Real Cost of Context-Switching in Modern Development
+Context-switching is one of the most silent productivity killers in software development. Every time an engineer jumps between issue trackers, design specs, code repositories, and communication channels, their cognitive momentum resets.
 
-## 2. Key Execution Steps
-- **Audit existing touchpoints**: Review where competitor content falls short.
-- **Double down on unique value**: Highlight proprietary workflows and case studies.
-- **Maintain publishing consistency**: Publish regular insights across your blog and social channels.
+Research shows it takes up to 23 minutes to regain full focus after a disruption. When user interfaces are sluggish or require multi-step navigation, micro-interruptions stack up throughout the day, leading to developer burnout and lower code output.
+
+## 2. Architectural Principles of High-Speed Interfaces
+High-performance interfaces do not happen by accident; they are engineered with speed as a core feature. Key architectural strategies include:
+
+- **Optimistic UI Updates**: Immediately reflecting user actions in the frontend state while background synchronization completes asynchronously.
+- **Keyboard-First Navigation**: Providing comprehensive command palettes and hotkeys to eliminate mouse travel time.
+- **Local-First Data Syncing**: Storing application state locally to ensure sub-100ms response times regardless of network latency.
+
+## 3. Designing for Cognitive Flow and Developer Ergonomics
+Ergonomics in software goes beyond visual aesthetics. It is about minimizing friction between intent and execution. When developer tools respond instantaneously, engineers feel empowered to iterate without distraction.
+
+By organizing information hierarchically and eliminating unnecessary modal dialogs, teams can execute complex operations in a single keypress.
+
+## 4. Measuring Impact: Velocity, Developer Satisfaction, and Retention
+Investing in UI performance yields direct returns across key engineering metrics:
+1. **Accelerated Pull Request Cycles**: Shorter turnaround times from issue assignment to code review.
+2. **Improved Onboarding**: Intuitive workflows allow new hires to become productive within days.
+3. **Higher Retention**: Developers who spend less time fighting sluggish tools report significantly higher job satisfaction.
 
 ## Key Takeaways
-- Strategic differentiation wins over noisy content.
-- Consistency and depth build long-term market authority.
+- UI speed directly impacts developer focus and cognitive flow.
+- Optimistic updates and keyboard shortcuts eliminate daily micro-friction.
+- Tooling ergonomics drive long-term engineering velocity and team satisfaction.
 
 ## Next Steps
-Start refining your content strategy today to capture uncovered market opportunities.`;
+Audit your internal tools and developer workflows today to identify speed bottlenecks and elevate team performance.`;
   } else {
     userPrompt = `Write an engaging ${platform} post about "${input.topic}".
 Target Audience: ${targetAudience}
@@ -334,13 +351,15 @@ Requirements for ${platform}:
     fallbackText = `Here's why ${input.topic} matters for ${targetAudience}.\n\n1. Identify the core challenge.\n2. Leverage automated insights.\n3. Execute with precision.\n\nWhat's your strategy? Let us know below.`;
   }
 
-  const draft_text = await chatText(userPrompt, fallbackText);
+  let draft_text = await chatText(userPrompt, fallbackText);
 
   let title = input.topic;
   if (isBlog) {
     const titleMatch = draft_text.match(/^#\s+(.+)$/m);
     if (titleMatch && titleMatch[1]) {
       title = titleMatch[1].trim();
+      // Remove the top H1 title line from draft_text so it isn't duplicated in the UI
+      draft_text = draft_text.replace(/^#\s+.+\n+/, '').trim();
     }
   }
 
