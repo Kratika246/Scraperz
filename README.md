@@ -1,36 +1,128 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# COMPETE (Scraperzz)
 
-## Getting Started
+> **Autonomous AI-powered competitive intelligence & content generation platform.**  
+> Monitor rival brands, discover strategic content gaps, and generate on-brand blog articles and social posts automatically.
 
-First, run the development server:
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)](https://react.dev)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Postgres-3ECF8E?logo=supabase)](https://supabase.com)
+[![Groq](https://img.shields.io/badge/LLM-Groq%20Inference-f55036)](https://console.groq.com)
+[![Bright Data](https://img.shields.io/badge/Scraping-Bright%20Data-blue)](https://brightdata.com)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?logo=tailwindcss)](https://tailwindcss.com)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## 📖 Documentation Index
+
+The project documentation is split into modular topics. Explore the dedicated guides below:
+
+| Guide | Description |
+|---|---|
+| 🏗️ [**Architecture & System Design**](docs/ARCHITECTURE.md) | High-level topology, component lifecycles, data flow diagrams, and architectural principles. |
+| 🛡️ [**Self-Healing Scraper Engine**](docs/SELF_HEALING_SCRAPING.md) | The 5-tier resilience hierarchy ("Into the Scrape-Verse"), AI DOM structural repair, and telemetry. |
+| 🎨 [**Image Generation (Free API vs NanoBanana)**](docs/IMAGE_GENERATION.md) | Details on Pollinations AI (free tier) and NanoBanana (production tier), code setup, and prompt strategy. |
+| 🔌 [**REST API Reference**](docs/API_REFERENCE.md) | Comprehensive endpoints guide for Brands, Competitors, Intelligence, Approvals, and Jobs. |
+| 🗄️ [**Database Schema & ERD**](docs/DATABASE_SCHEMA.md) | Multi-tenant PostgreSQL table definitions, constraints, relationships, and RLS policies. |
+| 🚀 [**Setup & Deployment Guide**](docs/SETUP_GUIDE.md) | Step-by-step local setup, environment variables, Supabase migrations, and Docker n8n configuration. |
+
+---
+
+## ⚡ Quick Overview
+
+COMPETE automates the competitive intelligence loop for modern marketing and growth teams:
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  1. Discover │ ──► │  2. Scrape   │ ──► │  3. Analyze  │ ──► │ 4. Generate  │
+│  Competitors │     │ Posts & Blog │     │ Content Gaps │     │ Posts & Blog │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────┬───────┘
+                                                                      │
+                                                                      ▼
+                                                               ┌──────────────┐
+                                                               │  5. Approve  │
+                                                               │  & Publish   │
+                                                               └──────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Brand Profile**: Enter a brand URL → Bright Data extracts the site → Groq LLM infers target audience, value propositions, and tone of voice.
+2. **Competitor Discovery**: Bright Data SERP API queries Google for organic alternatives and ranks competitors.
+3. **Multi-Source Scraping**: Scrapes competitor LinkedIn posts, X posts, and blog articles.
+4. **Autonomous Self-Healing**: Resilient 5-tier scraper engine (`lib/self_healing.ts`) with dynamic AI DOM recovery if target page structures change.
+5. **Gap Analysis**: Groq compares your brand against competitor feeds to uncover unmet topics and formats.
+6. **Multi-Format Content Generation**: Generates SEO-ready Markdown Blog Articles and Social Posts paired with AI-generated graphics ([Pollinations AI / NanoBanana](docs/IMAGE_GENERATION.md)).
+7. **Human-in-the-Loop Review**: Approve, reject, or annotate drafts in the Approval Center before automated queue publishing.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠️ Tech Stack
 
-## Learn More
+- **Framework**: Next.js 16 (App Router) + React 19
+- **Database & Auth**: Supabase (PostgreSQL with RLS)
+- **Scraping Engine**: Bright Data (SERP API + Scraper Studio collectors + Datasets) + Cheerio
+- **LLM Intelligence**: Groq (`openai/gpt-oss-120b`, `llama-3.3-70b-versatile`)
+- **Image Generation**: [Pollinations AI (Free) / NanoBanana (Production)](docs/IMAGE_GENERATION.md)
+- **Workflow Automation**: n8n (Docker container for scheduled weekly cron triggers)
+- **Styling**: Tailwind CSS v4
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🚀 Quick Start
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+# 1. Clone repo
+git clone https://github.com/Kratika246/Scraperz.git
+cd Scraperz
 
-## Deploy on Vercel
+# 2. Install dependencies
+pnpm install
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# 3. Setup environment
+cp .env .env.local
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# 4. Start development server
+pnpm dev
+```
+
+Visit [http://localhost:3000](http://localhost:3000) to explore the application.
+
+For detailed setup, migrations, and Docker instructions, see the [Setup & Deployment Guide](docs/SETUP_GUIDE.md).
+
+---
+
+## 📂 Project Structure
+
+```
+scraperz/
+├── app/
+│   ├── (auth)/               # Login & signup pages (split-panel layout)
+│   ├── api/                  # Backend REST API routes
+│   │   ├── brands/           # Brand CRUD, discovery, gap analysis, content gen
+│   │   ├── competitors/      # Handle discovery, content/blog scraping
+│   │   ├── generated-content/# Draft updates & approvals
+│   │   ├── intelligence/     # Scraped feed queries
+│   │   ├── jobs/             # Weekly cron trigger endpoint
+│   │   ├── publish/          # Queue publishing
+│   │   └── self-healing/     # Telemetry logs API
+│   ├── dashboard/            # Dashboard views (Competitors, Intelligence, Opportunities, Content, Approvals)
+│   └── page.tsx              # Modern landing page
+├── docs/                     # 📚 Modular documentation guides
+│   ├── ARCHITECTURE.md
+│   ├── IMAGE_GENERATION.md
+│   ├── SELF_HEALING_SCRAPING.md
+│   ├── API_REFERENCE.md
+│   ├── DATABASE_SCHEMA.md
+│   └── SETUP_GUIDE.md
+├── lib/
+│   ├── brightdata.ts         # Bright Data scraping implementation
+│   ├── llm.ts                # Groq client & image generation helpers
+│   ├── pipeline.ts           # Orchestration pipeline
+│   └── self_healing.ts       # 5-tier self-healing scraper engine
+├── supabase/migrations/      # SQL schema migrations
+└── n8n_workflows/            # Weekly scheduler workflow
+```
+
+---
+
+## 📄 License
+
+Licensed under the MIT License.
