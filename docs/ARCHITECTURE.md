@@ -21,6 +21,8 @@ COMPETE (Scraperzz) is designed as a high-performance, multi-tenant competitive 
 │  │  · Discovery          │  │  · Find Handles       │  │  · Approvals    │  │
 │  │  · Gap Analysis       │  │  · Scrape Posts       │  │  · Publish Jobs │  │
 │  │  · Content Generation │  │  · Scrape Blog        │  │  · Self-Healing │  │
+│  │                       │  │                       │  │  · /api/buffer  │  │
+│  │                       │  │                       │  │  · /image-gen   │  │
 │  └───────────────────────┘  └───────────────────────┘  └─────────────────┘  │
 └──────────────┬──────────────────────────┬─────────────────────────┬─────────┘
                │                          │                         │
@@ -30,17 +32,16 @@ COMPETE (Scraperzz) is designed as a high-performance, multi-tenant competitive 
 │  Supabase (PostgreSQL)    │ │ Bright Data Engine    │ │ Groq Inference API  │
 │  · Row Level Security     │ │ · SERP API (Google)   │ │ · gpt-oss-120b      │
 │  · Multi-tenant profiles  │ │ · Scraper Studio      │ │ · llama-3.3-70b     │
-│  · Content storage        │ │ · Web Datasets        │ │ · Structured JSON   │
-│  · Job status queues      │ │ · Cheerio DOM Parser  │ │ · Gap Analysis      │
+│  · Content & publish queue│ │ · Web Datasets        │ │ · Structured JSON   │
+│  · Buffer Access Tokens   │ │ · Cheerio DOM Parser  │ │ · Gap Analysis      │
 └───────────────────────────┘ └───────────────────────┘ └───────────┬─────────┘
                                                                     │ Visual Prompt
                                                         ┌───────────▼─────────┐
-                                                        │   Image Generation  │
+                                                        │ Image Gen Cascade   │
                                                         │                     │
-                                                        │ · Pollinations AI   │
-                                                        │   (Free tier)       │
-                                                        │ · NanoBanana API    │
-                                                        │   (Production tier) │
+                                                        │ 1. Pollinations AI  │
+                                                        │ 2. AI Horde Grid    │
+                                                        │ 3. FLUX / NanoBanana│
                                                         └─────────────────────┘
                                ▲
 ┌──────────────────────────────┴──────────────────────────────┐
@@ -56,14 +57,16 @@ COMPETE (Scraperzz) is designed as a high-performance, multi-tenant competitive 
 
 ## 2. Core Architectural Principles
 
-1. **API-First Heavy Lifting**: The React UI remains lightweight and declarative. All heavy computations—multi-source web scraping, LLM prompt chaining, gap matrix calculations, and image synthesis—are executed exclusively inside isolated Next.js server route handlers.
+1. **API-First Heavy Lifting**: The React UI remains lightweight and declarative. All heavy computations—multi-source web scraping, LLM prompt chaining, gap matrix calculations, image synthesis, and Buffer publishing—are executed exclusively inside isolated Next.js server route handlers.
 2. **Autonomous Self-Healing**: Scraping logic employs a 5-tier graceful degradation pipeline (`lib/self_healing.ts`), automatically recovering from DOM layout changes without human intervention.
-3. **Decoupled Workflow Scheduling**: n8n is strictly utilized as a cron scheduler invoking webhook endpoints (`/api/jobs/weekly`). It does not store credentials or perform direct scraping, preserving a clean boundary.
-4. **Strict Multi-Tenancy & RLS**: All database rows belong to a `tenant_id` associated with authenticated user profiles in Supabase.
+3. **Resilient Multi-Tier Image Generation**: Visual creation (`lib/image-gen.ts`) uses a free-first cascade (Pollinations → AI Horde → FLUX.1 / NanoBanana), ensuring images are always produced even during external service outages.
+4. **Buffer Multi-Channel Publishing**: Direct integration with the Buffer GraphQL & REST API (`lib/buffer.ts`) allows scheduling and dispatching content directly to LinkedIn, Twitter, Facebook, and Instagram.
+5. **Decoupled Workflow Scheduling**: n8n is strictly utilized as a cron scheduler invoking webhook endpoints (`/api/jobs/weekly`). It does not store credentials or perform direct scraping, preserving a clean boundary.
+6. **Strict Multi-Tenancy & RLS**: All database rows belong to a `tenant_id` associated with authenticated user profiles in Supabase.
 
 ---
 
-## 3. Component Interaction Lifecycle
+## 3. End-to-End Component Lifecycle
 
 ```
 [1. User adds Brand URL]
@@ -90,10 +93,10 @@ COMPETE (Scraperzz) is designed as a high-performance, multi-tenant competitive 
 [Next.js API: /api/brands/:id/analyze-gaps] ──► Groq analyzes brand vs. competitor feeds
        │
        ▼
-[Next.js API: /api/brands/:id/generate-content] ──► Groq drafts articles/posts + Image Gen Engine
+[Next.js API: /api/brands/:id/generate-content] ──► Groq drafts articles/posts + Image Gen Cascade
        │
        ▼
-[Approval Dashboard] ──► Human review & Buffer/Queue publishing
+[Approval Dashboard] ──► Human review → [Buffer API / POST /api/publish] → Social Channels
 ```
 
 ---
@@ -105,15 +108,15 @@ COMPETE (Scraperzz) is designed as a high-performance, multi-tenant competitive 
 - Client components for interactive tables, real-time status toggles, and live telemetry feeds.
 - Route handlers with `AbortSignal.timeout` safeguards and standardized JSON error responses.
 
-### Supabase Layer
-- JWT authentication with secure HTTP-only cookies.
-- Real-time updates for long-running scrape job status changes.
-- PostgreSQL schema configured with cascades and safety constraints.
+### Buffer Publishing Engine (`lib/buffer.ts`)
+- Implements GraphQL mutations (`createPost`) for modern Buffer OAuth channels.
+- Automatic URL resolution for tracking published live updates across Twitter, LinkedIn, etc.
+- In-memory and per-tenant Supabase persistence for Buffer access tokens.
 
-### Bright Data Integration Layer
-- **SERP API Zone**: Dynamic query generator targeting competitor discovery queries.
-- **Scraper Studio**: Collector endpoints for structured social profile details and handle discovery.
-- **Cheerio Fallback**: Lightweight DOM selector parsing for blog feeds and article bodies.
+### Image Generation Cascade (`lib/image-gen.ts`)
+- Tier 1: Pollinations AI (fast zero-config default).
+- Tier 2: AI Horde (distributed open-source fallback).
+- Tier 3: Hugging Face / Together FLUX.1 & NanoBanana (premium high-fidelity models).
 
 ### Groq LLM Inference Layer
 - OpenAI-compatible `/v1` client with strict JSON schema response mode (`chatJson`).

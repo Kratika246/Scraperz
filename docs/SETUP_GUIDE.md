@@ -13,7 +13,8 @@ This guide walks through configuring Scraperzz (COMPETE) from scratch on local m
   - [Supabase](https://supabase.com) (Database + Auth)
   - [Groq Console](https://console.groq.com/keys) (Free fast LLM inference)
   - [Bright Data](https://brightdata.com) (SERP API + Scraper Studio)
-  - *(Optional)* [NanoBanana](https://nanobanana.ai) (Production image generation)
+  - *(Optional)* [Buffer Account](https://buffer.com) (Social publishing token)
+  - *(Optional)* [Hugging Face](https://huggingface.co) / [Together AI](https://together.xyz) / [NanoBanana](https://nanobanana.ai) (Premium image generation)
 
 ---
 
@@ -55,6 +56,15 @@ BRIGHTDATA_API_KEY=<your-brightdata-token>
 BRIGHTDATA_SERP_ZONE=serp_api1
 BRIGHTDATA_COLLECTOR_BRAND_WEBSITE=c_...
 
+# Buffer Publishing (Optional - can also be configured per-tenant in Dashboard Settings)
+BUFFER_ACCESS_TOKEN=1/...
+BUFFER_GRAPHQL_ENDPOINT=https://api.buffer.com
+
+# Premium Image Generation (Optional)
+# HF_TOKEN=hf_...
+# TOGETHER_API_KEY=...
+# NANOBANANA_API_KEY=nb_...
+
 # n8n Automation
 N8N_BASE_URL=http://localhost:5678
 N8N_WEBHOOK_SECRET=your-secure-secret
@@ -77,7 +87,16 @@ Navigate to [http://localhost:3000](http://localhost:3000) to access the landing
 
 ---
 
-## 3. n8n Scheduler Setup (Docker)
+## 3. Buffer Publishing Setup
+
+1. Log into [Buffer](https://buffer.com) and connect your channels (LinkedIn, Twitter, Facebook, Instagram).
+2. Generate an Access Token from the Buffer developer portal.
+3. In Scraperzz, navigate to **Dashboard → Settings** and paste your token, or set `BUFFER_ACCESS_TOKEN` in `.env.local`.
+4. Channels will automatically load and allow one-click publishing from the Approval Center.
+
+---
+
+## 4. n8n Scheduler Setup (Docker)
 
 To run the automated weekly scraper pipeline:
 
@@ -96,7 +115,7 @@ docker compose ps
 
 ---
 
-## 4. Production Deployment Checklist
+## 5. Production Deployment Checklist
 
 - [ ] Set `NODE_ENV=production`
 - [ ] Add all production environment variables to your hosting provider (Vercel / AWS / Render).

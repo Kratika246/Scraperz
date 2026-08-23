@@ -1,13 +1,14 @@
 # COMPETE (Scraperzz)
 
 > **Autonomous AI-powered competitive intelligence & content generation platform.**  
-> Monitor rival brands, discover strategic content gaps, and generate on-brand blog articles and social posts automatically.
+> Monitor rival brands, discover strategic content gaps, and generate & publish on-brand blog articles and social posts automatically via Buffer.
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black?logo=next.js)](https://nextjs.org)
 [![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react)](https://react.dev)
 [![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20Postgres-3ECF8E?logo=supabase)](https://supabase.com)
 [![Groq](https://img.shields.io/badge/LLM-Groq%20Inference-f55036)](https://console.groq.com)
 [![Bright Data](https://img.shields.io/badge/Scraping-Bright%20Data-blue)](https://brightdata.com)
+[![Buffer](https://img.shields.io/badge/Publishing-Buffer%20GraphQL-231F20)](https://buffer.com)
 [![TailwindCSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?logo=tailwindcss)](https://tailwindcss.com)
 
 ---
@@ -18,12 +19,12 @@ The project documentation is split into modular topics. Explore the dedicated gu
 
 | Guide | Description |
 |---|---|
-| 🏗️ [**Architecture & System Design**](docs/ARCHITECTURE.md) | High-level topology, component lifecycles, data flow diagrams, and architectural principles. |
+| 🏗️ [**Architecture & System Design**](docs/ARCHITECTURE.md) | High-level topology, component lifecycles, data flow diagrams, Buffer publishing engine, and architectural principles. |
 | 🛡️ [**Self-Healing Scraper Engine**](docs/SELF_HEALING_SCRAPING.md) | The 5-tier resilience hierarchy ("Into the Scrape-Verse"), AI DOM structural repair, and telemetry. |
-| 🎨 [**Image Generation (Pollinations & Premium Models)**](docs/IMAGE_GENERATION.md) | Details on Pollinations AI (free default) and upgrading to premium models (NanoBanana, Flux Pro) for higher fidelity. |
-| 🔌 [**REST API Reference**](docs/API_REFERENCE.md) | Comprehensive endpoints guide for Brands, Competitors, Intelligence, Approvals, and Jobs. |
-| 🗄️ [**Database Schema & ERD**](docs/DATABASE_SCHEMA.md) | Multi-tenant PostgreSQL table definitions, constraints, relationships, and RLS policies. |
-| 🚀 [**Setup & Deployment Guide**](docs/SETUP_GUIDE.md) | Step-by-step local setup, environment variables, Supabase migrations, and Docker n8n configuration. |
+| 🎨 [**Image Generation (Pollinations & Premium Models)**](docs/IMAGE_GENERATION.md) | Multi-tier cascade (Pollinations, AI Horde, FLUX.1, NanoBanana), standalone image API (`/api/image-gen`), and prompt strategy. |
+| 🔌 [**REST API Reference**](docs/API_REFERENCE.md) | Comprehensive endpoints guide for Brands, Competitors, Intelligence, Approvals, Buffer Settings, and Jobs. |
+| 🗄️ [**Database Schema & ERD**](docs/DATABASE_SCHEMA.md) | Multi-tenant PostgreSQL table definitions, Buffer token columns, constraints, relationships, and RLS policies. |
+| 🚀 [**Setup & Deployment Guide**](docs/SETUP_GUIDE.md) | Step-by-step local setup, Buffer token integration, environment variables, Supabase migrations, and Docker n8n configuration. |
 
 ---
 
@@ -41,6 +42,7 @@ COMPETE automates the competitive intelligence loop for modern marketing and gro
                                                                ┌──────────────┐
                                                                │  5. Approve  │
                                                                │  & Publish   │
+                                                               │  (via Buffer)│
                                                                └──────────────┘
 ```
 
@@ -49,8 +51,8 @@ COMPETE automates the competitive intelligence loop for modern marketing and gro
 3. **Multi-Source Scraping**: Scrapes competitor LinkedIn posts, X posts, and blog articles.
 4. **Autonomous Self-Healing**: Resilient 5-tier scraper engine (`lib/self_healing.ts`) with dynamic AI DOM recovery if target page structures change.
 5. **Gap Analysis**: Groq compares your brand against competitor feeds to uncover unmet topics and formats.
-6. **Multi-Format Content Generation**: Generates SEO-ready Markdown Blog Articles and Social Posts paired with AI-generated graphics ([Pollinations AI / Premium Models](docs/IMAGE_GENERATION.md)).
-7. **Human-in-the-Loop Review**: Approve, reject, or annotate drafts in the Approval Center before automated queue publishing.
+6. **Multi-Format Content Generation**: Generates SEO-ready Markdown Blog Articles and Social Posts paired with AI-generated graphics ([Pollinations / AI Horde / Premium Models](docs/IMAGE_GENERATION.md)).
+7. **Human-in-the-Loop Review & Publishing**: Review and edit drafts in the Approval Center, then queue and publish directly to connected social channels via the **Buffer GraphQL API**.
 
 ---
 
@@ -60,7 +62,8 @@ COMPETE automates the competitive intelligence loop for modern marketing and gro
 - **Database & Auth**: Supabase (PostgreSQL with RLS)
 - **Scraping Engine**: Bright Data (SERP API + Scraper Studio collectors + Datasets) + Cheerio
 - **LLM Intelligence**: Groq (`openai/gpt-oss-120b`, `llama-3.3-70b-versatile`)
-- **Image Generation**: [Pollinations AI (Free) / NanoBanana (Production)](docs/IMAGE_GENERATION.md)
+- **Image Generation**: [Pollinations AI / AI Horde / FLUX.1 / NanoBanana](docs/IMAGE_GENERATION.md)
+- **Publishing Pipeline**: Buffer GraphQL API (`lib/buffer.ts`)
 - **Workflow Automation**: n8n (Docker container for scheduled weekly cron triggers)
 - **Styling**: Tailwind CSS v4
 
@@ -85,7 +88,7 @@ pnpm dev
 
 Visit [http://localhost:3000](http://localhost:3000) to explore the application.
 
-For detailed setup, migrations, and Docker instructions, see the [Setup & Deployment Guide](docs/SETUP_GUIDE.md).
+For detailed setup, migrations, Buffer configuration, and Docker instructions, see the [Setup & Deployment Guide](docs/SETUP_GUIDE.md).
 
 ---
 
@@ -97,13 +100,15 @@ scraperz/
 │   ├── (auth)/               # Login & signup pages (split-panel layout)
 │   ├── api/                  # Backend REST API routes
 │   │   ├── brands/           # Brand CRUD, discovery, gap analysis, content gen
+│   │   ├── buffer/           # Buffer channel & settings API
 │   │   ├── competitors/      # Handle discovery, content/blog scraping
 │   │   ├── generated-content/# Draft updates & approvals
+│   │   ├── image-gen/        # On-demand image generation endpoint
 │   │   ├── intelligence/     # Scraped feed queries
 │   │   ├── jobs/             # Weekly cron trigger endpoint
-│   │   ├── publish/          # Queue publishing
+│   │   ├── publish/          # Queue & direct Buffer publishing
 │   │   └── self-healing/     # Telemetry logs API
-│   ├── dashboard/            # Dashboard views (Competitors, Intelligence, Opportunities, Content, Approvals)
+│   ├── dashboard/            # Dashboard views (Competitors, Intelligence, Opportunities, Content, Approvals, Settings)
 │   └── page.tsx              # Modern landing page
 ├── docs/                     # 📚 Modular documentation guides
 │   ├── ARCHITECTURE.md
@@ -114,10 +119,12 @@ scraperz/
 │   └── SETUP_GUIDE.md
 ├── lib/
 │   ├── brightdata.ts         # Bright Data scraping implementation
-│   ├── llm.ts                # Groq client & image generation helpers
+│   ├── buffer.ts             # Buffer GraphQL API publishing engine
+│   ├── image-gen.ts          # Free-first multi-tier image generation cascade
+│   ├── llm.ts                # Groq client & chat helpers
 │   ├── pipeline.ts           # Orchestration pipeline
 │   └── self_healing.ts       # 5-tier self-healing scraper engine
-├── supabase/migrations/      # SQL schema migrations
+├── supabase/migrations/      # SQL schema migrations (including Buffer tokens)
 └── n8n_workflows/            # Weekly scheduler workflow
 ```
 

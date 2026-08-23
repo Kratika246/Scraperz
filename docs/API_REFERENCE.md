@@ -109,11 +109,25 @@ All requests to `/api/*` (except auth registration/login and public health endpo
 | `GET` | `/api/intelligence` | Query paginated list of all scraped competitor posts & blogs |
 | `GET` | `/api/generated-content` | List all AI drafts by brand and status |
 | `PATCH` | `/api/generated-content/:id` | Edit content notes or update status (`approved`, `rejected`) |
-| `POST` | `/api/publish` | Queue approved post to publishing network (Buffer / local queue) |
+| `POST` | `/api/publish` | Queue approved post to connected Buffer social channels or local queue |
+| `POST` | `/api/publish/refresh` | Refresh live published status URLs from Buffer GraphQL API |
 
 ---
 
-## 4. System & Automation
+## 4. Buffer Integration & Image Generation
+
+### Buffer Settings
+- **Endpoint**: `GET /api/buffer/settings` — Returns current Buffer connection state and channels.
+- **Endpoint**: `POST /api/buffer/settings` — Save or test Buffer Access Token for the tenant.
+
+### On-Demand Image Generation
+- **Endpoint**: `POST /api/image-gen`
+- **Body**: `{ "prompt": "Modern SaaS dashboard graphic" }`
+- **Response**: `{ "ok": true, "dataUri": "data:image/jpeg;base64,...", "model": "pollinations/flux" }`
+
+---
+
+## 5. System & Automation
 
 ### Weekly Refresh Job (n8n Webhook Target)
 - **Endpoint**: `POST /api/jobs/weekly`

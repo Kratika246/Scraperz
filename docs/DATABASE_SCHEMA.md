@@ -8,7 +8,7 @@ The COMPETE persistence layer is built on **PostgreSQL (Supabase)** with Row-Lev
 
 ```
    ┌───────────────┐
-   │    tenants    │
+   │    tenants    │ (holds buffer_access_token)
    └───┬───────────┘
        │ 1
        │
@@ -28,8 +28,8 @@ The COMPETE persistence layer is built on **PostgreSQL (Supabase)** with Row-Lev
        ├──────────────┐      │ N
        │ N            │ N ┌──▼───────────────────────────┐
    ┌───▼────────┐ ┌───▼───┴──────────┐   │         publish_jobs          │
-   │ competitor_│ │competitor_content│   └───────────────────────────────┘
-   │   social_  │ └──────────────────┘
+   │ competitor_│ │competitor_content│   │ (Buffer post & update status) │
+   │   social_  │ └──────────────────┘   └───────────────────────────────┘
    │   handles  │
    └────────────┘
 ```
@@ -39,12 +39,13 @@ The COMPETE persistence layer is built on **PostgreSQL (Supabase)** with Row-Lev
 ## 2. Table Definitions
 
 ### `tenants` & `profiles`
-Multi-tenant root isolating organizations, workspaces, and team memberships.
+Multi-tenant root isolating organizations, workspaces, and team memberships. Includes Buffer access token per tenant.
 
 ```sql
 CREATE TABLE tenants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  buffer_access_token TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -146,6 +147,7 @@ CREATE TABLE generated_content (
   title TEXT,
   body TEXT NOT NULL,
   image_url TEXT,
+  generated_image_urls TEXT[],
   status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'approved', 'rejected', 'published')),
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -155,8 +157,11 @@ CREATE TABLE publish_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content_id UUID NOT NULL REFERENCES generated_content(id) ON DELETE CASCADE,
   status TEXT DEFAULT 'queued' CHECK (status IN ('queued', 'publishing', 'published', 'failed')),
+  target_profiles TEXT[],
   scheduled_at TIMESTAMPTZ,
   published_at TIMESTAMPTZ,
+  buffer_update_id TEXT,
+  published_url TEXT,
   error TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
