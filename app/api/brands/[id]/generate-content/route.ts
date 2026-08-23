@@ -10,10 +10,11 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const { gap_report_id, topic, platform } = body as {
+  const { gap_report_id, topic, platform, content_type } = body as {
     gap_report_id?: string;
     topic?: string;
     platform?: string;
+    content_type?: string;
   };
 
   const supabase = await createClient();
@@ -45,6 +46,7 @@ export async function POST(
       gap_report_id,
       topic: resolvedTopic,
       platform: resolvedPlatform,
+      content_type: content_type,
     });
     return NextResponse.json({ ok: true, via: 'api', content });
   } catch (err) {

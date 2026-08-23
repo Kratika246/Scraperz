@@ -215,18 +215,42 @@ export async function runGapAnalysis(
 ) {
   const fallback = {
     gaps: [
-      'Missing enterprise security proof points',
-      'Few customer success stories vs competitors',
+      'Missing enterprise security proof points and compliance details',
+      'Few customer success stories and workflow deep-dives vs competitors',
+      'Under-indexing on long-form technical blog articles',
     ],
-    topics: ['Security', 'Automation', 'Case studies'],
-    formats: ['Carousel', 'LinkedIn post', 'Blog'],
+    topics: [
+      'Why AI Guardrails Need Real-Time Verification',
+      'Enterprise Workflow Automation Best Practices',
+      'Reducing Research Time by 80% with Automated Scrapers',
+    ],
+    formats: ['Blog article', 'LinkedIn post', 'Twitter/X thread', 'Instagram carousel'],
+    competitor_insights:
+      'Competitors focus heavily on generic growth tips, leaving an open opportunity for technical depth and enterprise-grade security messaging.',
   };
+
+  const prompt = `You are a strategic competitive intelligence analyst.
+Analyze the provided competitor content sample against our brand context.
+
+Brand Context:
+${JSON.stringify(brand.context, null, 2)}
+
+Competitor Content Sample:
+${JSON.stringify(contentSample, null, 2)}
+
+Identify content gaps, recommended topic ideas (for both blog articles and social posts), and content format recommendations.
+
+Return valid JSON with:
+{
+  "gaps": string[],
+  "topics": string[],
+  "formats": string[],
+  "competitor_insights": string
+}`;
 
   const findings = await chatJson(
     'You are a competitive intelligence analyst. Return JSON only.',
-    `Brand context: ${JSON.stringify(brand.context)}
-Competitor content sample: ${JSON.stringify(contentSample)}
-Return JSON: { "gaps": string[], "topics": string[], "formats": string[] }`,
+    prompt,
     fallback
   );
 
@@ -249,19 +273,82 @@ export async function runGenerateContent(
     brand: { id: string; tenant_id: string; context: unknown };
     gap_report_id?: string | null;
     topic: string;
-    platform: string;
+    platform: string; // 'blog' | 'linkedin' | 'twitter' | 'instagram' | 'facebook'
+    content_type?: string; // 'article' | 'post'
   }
 ) {
   const tone = (input.brand.context as { tone_keywords?: string[] })?.tone_keywords || [];
-  const fallback = `Here's why ${input.topic} matters for teams that want faster, safer growth.\n\nStart with one proof point. Then show the workflow. End with a clear next step.`;
-  const draft_text = await chatText(
-    `Write a ${input.platform} post about "${input.topic}". Tone: ${tone.join(', ') || 'professional'}. 120-180 words. No hashtag dump.`,
-    fallback
-  );
+  const targetAudience = (input.brand.context as { target_audience?: string })?.target_audience || 'professionals';
+  const isBlog = input.platform.toLowerCase() === 'blog' || input.content_type === 'article';
 
-  const generated_image_urls = [
-    pollinationsImageUrl(`Professional social graphic about ${input.topic}, clean corporate illustration, no text`),
-  ];
+  const contentType = isBlog ? 'article' : 'post';
+  const platform = isBlog ? 'blog' : input.platform.toLowerCase();
+
+  let userPrompt = '';
+  let fallbackText = '';
+
+  if (isBlog) {
+    userPrompt = `Write a comprehensive, engaging, SEO-optimized blog article about "${input.topic}".
+Target Audience: ${targetAudience}
+Tone: ${tone.join(', ') || 'professional, authoritative, and practical'}
+Brand Context: ${JSON.stringify(input.brand.context)}
+
+Structure requirements:
+- Clean Markdown title heading (# Title)
+- Brief Executive Summary (2-3 sentences)
+- 3 core sections with clear subheadings (## Section Title)
+- Bulleted list of Key Takeaways
+- Actionable Conclusion and CTA
+
+Length: 350-500 words. Format in clean Markdown.`;
+
+    fallbackText = `# ${input.topic}
+
+## Executive Summary
+In today's fast-evolving landscape, staying ahead requires strategic execution. This article breaks down actionable insights for ${targetAudience}.
+
+## 1. Understanding the Strategic Edge
+Modern growth relies on actionable intelligence. By identifying content gaps and understanding competitor positioning, teams can craft messaging that truly resonates.
+
+## 2. Key Execution Steps
+- **Audit existing touchpoints**: Review where competitor content falls short.
+- **Double down on unique value**: Highlight proprietary workflows and case studies.
+- **Maintain publishing consistency**: Publish regular insights across your blog and social channels.
+
+## Key Takeaways
+- Strategic differentiation wins over noisy content.
+- Consistency and depth build long-term market authority.
+
+## Next Steps
+Start refining your content strategy today to capture uncovered market opportunities.`;
+  } else {
+    userPrompt = `Write an engaging ${platform} post about "${input.topic}".
+Target Audience: ${targetAudience}
+Tone: ${tone.join(', ') || 'professional'}
+Brand Context: ${JSON.stringify(input.brand.context)}
+
+Requirements for ${platform}:
+- ${platform === 'twitter' ? 'Concise post under 280 characters with strong hook and clear message.' : platform === 'instagram' ? 'Visual caption with strong hook, engaging body, clear CTA, and 3-5 relevant hashtags.' : 'Strong hook line, clear value points with spacing/bullets, and call to action. 120-200 words.'}
+- Professional formatting, no generic fluff.`;
+
+    fallbackText = `Here's why ${input.topic} matters for ${targetAudience}.\n\n1. Identify the core challenge.\n2. Leverage automated insights.\n3. Execute with precision.\n\nWhat's your strategy? Let us know below.`;
+  }
+
+  const draft_text = await chatText(userPrompt, fallbackText);
+
+  let title = input.topic;
+  if (isBlog) {
+    const titleMatch = draft_text.match(/^#\s+(.+)$/m);
+    if (titleMatch && titleMatch[1]) {
+      title = titleMatch[1].trim();
+    }
+  }
+
+  const imagePrompt = isBlog
+    ? `Professional blog header illustration about ${input.topic}, sleek modern tech design, clean corporate graphics`
+    : `Professional social media graphic about ${input.topic}, modern corporate design, clean graphics`;
+
+  const generated_image_urls = [pollinationsImageUrl(imagePrompt)];
 
   const { data, error } = await supabase
     .from('generated_content')
@@ -269,12 +356,12 @@ export async function runGenerateContent(
       brand_id: input.brand.id,
       tenant_id: input.brand.tenant_id,
       gap_report_id: input.gap_report_id || null,
-      content_type: 'post',
-      platform: input.platform,
-      title: input.topic,
+      content_type: contentType,
+      platform: platform,
+      title: title,
       draft_text,
       generated_image_urls,
-      opportunity_score: 90,
+      opportunity_score: 95,
       status: 'draft',
     })
     .select()

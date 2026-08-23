@@ -126,6 +126,34 @@ export default function CompetitorsPage() {
       />
 
       <div className="p-8 space-y-6">
+        <div className="bg-slate-900 border border-slate-800 text-white p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                <span>Self-Healing Scraper Engine Active</span>
+                <span className="text-[10px] bg-emerald-900 text-emerald-300 border border-emerald-700 px-2 py-0.5 rounded-full uppercase tracking-wide font-mono">
+                  Into the Scrape-Verse
+                </span>
+              </h4>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Resilient multi-tier fallback active (SERP API → Scraper Studio → DOM Aria → Regex Scan → AI Structural Repair). Automatically adapts when web layouts change.
+              </p>
+            </div>
+          </div>
+          <a
+            href="/api/self-healing"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg font-medium transition flex-shrink-0"
+          >
+            View Telemetry API
+          </a>
+        </div>
+
         {!brand?.context && (
           <div className="bg-warning-50 border border-warning-200 text-warning-800 p-4 rounded-lg">
             Brand context missing. Finish website scrape on My Product first.

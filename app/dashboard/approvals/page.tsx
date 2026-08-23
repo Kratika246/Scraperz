@@ -82,9 +82,12 @@ export default function ApprovalsPage() {
                   }`}
                 >
                   <h3 className="text-sm font-semibold text-slate-900 truncate">{item.title}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {item.platform} · {item.status}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge variant={item.platform === 'blog' ? 'success' : 'info'}>
+                      {item.platform === 'blog' ? 'Blog Article' : item.platform}
+                    </Badge>
+                    <span className="text-xs text-slate-400 capitalize">{item.status}</span>
+                  </div>
                 </button>
               ))}
               {items.length === 0 && (
@@ -99,19 +102,28 @@ export default function ApprovalsPage() {
         <div className="col-span-1 lg:col-span-8 flex flex-col h-[calc(100vh-180px)]">
           {selectedItem ? (
             <Card className="flex-1 flex flex-col p-8 overflow-y-auto" padding="none">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-semibold text-slate-900">{selectedItem.title}</h2>
-                <Badge variant="primary">{selectedItem.status}</Badge>
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge variant={selectedItem.platform === 'blog' ? 'success' : 'info'}>
+                      {selectedItem.platform === 'blog' ? 'Blog Article' : selectedItem.platform}
+                    </Badge>
+                    <Badge variant="primary">{selectedItem.status}</Badge>
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-900 mt-2">{selectedItem.title}</h2>
+                </div>
               </div>
-              <p className="text-slate-800 text-[15px] leading-relaxed whitespace-pre-wrap">
+
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-[15px] leading-relaxed whitespace-pre-wrap font-sans">
                 {selectedItem.draft_text}
-              </p>
+              </div>
+
               {selectedItem.generated_image_urls?.[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={selectedItem.generated_image_urls[0]}
                   alt=""
-                  className="mt-6 rounded-xl border border-slate-200 max-w-md"
+                  className="mt-6 rounded-xl border border-slate-200 max-w-lg object-cover"
                 />
               )}
               <div className="mt-8">

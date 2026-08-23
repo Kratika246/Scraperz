@@ -1,22 +1,33 @@
 # Scraperzz — Platform Overview
 
-Scraperzz is a competitive-intelligence and content-ops product. A team adds a brand, Next.js APIs scrape via **Bright Data** (SERP API for competitor discovery, Scraper Studio collectors for everything else), Groq finds content gaps and drafts posts, and a human approves before anything is queued to publish.
+Scraperzz is a competitive-intelligence and content-ops product. A team adds a brand, Next.js APIs scrape via **Bright Data** (SERP API for competitor discovery, dataset scrapers for LinkedIn/X, Scraper Studio collectors for brand websites & handles, and blog HTML parsers), Groq performs competitive gap analysis and drafts blog articles & social posts, and a human approves before anything is queued to publish.
 
 **The UI only calls Next.js APIs.** Those APIs do scraping, LLM work, and Supabase writes. **n8n does not scrape or generate.** It only calls `POST /api/jobs/weekly` on a schedule.
-
-**Competitor discovery uses the Bright Data SERP API** (`POST https://api.brightdata.com/request` with `brd_json=1`). All other scraping uses Scraper Studio collectors (`c_...`). Web Unlocker and marketplace `dataset_id` scrapers are not used.
 
 ---
 
 ## What it does
 
 1. **Brand context** — Scraper Studio brand-website collector (`{ url }`) returns page text; Groq fills `brands.context`.
-2. **Competitor discovery** — Bright Data **SERP API** (`POST /request`, `brd_json=1`): fires two Google searches (`"<brand>" competitors alternatives <industry>` + `best <industry> tools alternative to "<brand>"`), extracts organic results, deduplicates by domain, filters aggregators/social sites, scores by search position. Optional fallback to a Scraper Studio competitors collector if `BRIGHTDATA_COLLECTOR_COMPETITORS` is set.
-3. **Social handles** — Scraper Studio handles collector on the competitor homepage (`{ url }`).
-4. **Posts** — Scraper Studio social-content collector (`{ url, platform }`), with optional LinkedIn / X collector overrides.
-5. **Gap analysis** — Groq compares brand context to scraped posts (no scrape).
-6. **Content generation** — Groq draft + Pollinations image, stored as `draft` (no scrape).
-7. **Approval + publish** — Human approval; `POST /api/publish` queues Buffer (or a local sent job if no Buffer token).
+2. **Competitor discovery** — Bright Data **SERP API** (`POST /request`, `brd_json=1`): fires Google searches (`"<brand>" competitors alternatives <industry>` + `best <industry> tools alternative to "<brand>"`), extracts organic results, deduplicates by domain, filters aggregators/social sites, scores by position.
+3. **Social handles** — Scraper Studio handles collector or DOM/HTML parser on the competitor homepage (`{ url }`). Normalizes platform values (`linkedin`, `twitter`, `instagram`, `facebook`, `youtube`, `tiktok`, `other`) for DB check constraint safety.
+4. **Competitor content & blog scraping** — Scrapes competitor social posts (LinkedIn datasets, X datasets) and blog articles (`scrapeBrandBlog` / `runScrapeBlog`), inserting into `competitor_content`.
+5. **Gap analysis** — Groq compares brand context against collected competitor posts & blog articles to uncover content gaps, strategic positioning insights, recommended topics, and target content formats.
+6. **Multi-format content generation** — Groq generates high-quality **Blog Articles** (structured markdown with H1, executive summary, key sections, takeaways, CTA) and **Social Posts** (LinkedIn, Twitter/X, Instagram, Facebook) paired with Pollinations graphic headers.
+7. **Approval & publishing** — Human review in Approval Center; `POST /api/publish` queues Buffer (or local queue).
+
+---
+
+## Self-Healing Scraper Architecture ("Into the Scrape-Verse")
+
+Scraperzz features an **Autonomous Self-Healing Scraper Engine** (`lib/self_healing.ts`) designed so the system automatically adapts and auto-repairs when target web DOM layouts or CSS class names change:
+
+- **Tier 1 (Scraper Studio & Datasets)**: Bright Data API collectors & datasets (`gd_...`, `c_...`).
+- **Tier 2 (SERP API Engine)**: Google SERP parsing (`brd_json=1`) when competitor structure or discovery fails.
+- **Tier 3 (DOM Aria & Attribute Matching)**: Cheerio selector extraction for social channels & article wrappers (`<article>`, `[class*="post"]`).
+- **Tier 4 (Regex & Heuristic Scanning)**: Markup scanning across raw HTML for embedded links and path prefixes (`/blog/`).
+- **Tier 5 (AI Structural DOM Repair)**: If static rules yield 0 items due to DOM layout changes, raw HTML snippets are routed to **Groq AI Repair Engine** (`aiRepairExtraction`) to dynamically extract target data without human intervention.
+- **Live Telemetry API & UI**: Auto-repair events are logged (`recordSelfHealingEvent`), exposed via `GET /api/self-healing`, and monitored live on the Competitors Dashboard.
 
 ---
 
@@ -24,66 +35,14 @@ Scraperzz is a competitive-intelligence and content-ops product. A team adds a b
 
 | Layer | Choice | Role |
 |---|---|---|
-| App | Next.js 16 + React 19 | UI and all heavy-lifting APIs |
+| App | Next.js 16 + React 19 | UI and heavy-lifting APIs |
 | Auth + DB | Supabase | Multi-tenant Postgres, Auth, RLS |
 | Scraping (competitor discovery) | Bright Data **SERP API** | `POST /request` + `brd_json=1` on Google |
-| Scraping (everything else) | Bright Data **Scraper Studio** | `POST /dca/trigger` + poll `GET /dca/dataset` |
-| LLM | Groq (`llama-3.3-70b-versatile`) | Brand extract, gaps, drafts |
-| Images | Pollinations | No API key |
+| Scraping (social content & datasets) | Bright Data Datasets & Scraper Studio | LinkedIn (`gd_...`), X (`gd_...`), Brand website & handles |
+| Scraping (blog articles) | Bright Data + Cheerio | Blog listing link discovery & article extraction (`scrapeBrandBlog`) |
+| LLM | Groq (`llama-3.3-70b-versatile` / `gpt-oss-120b`) | Brand extraction, gap analysis, blog articles & social posts |
+| Visuals | Pollinations | Image generation for blog headers & social graphics |
 | Scheduler | n8n | Weekly `POST /api/jobs/weekly` only |
-
-Client: `lib/brightdata.ts` (`runStudioCollector`). Pipeline: `lib/pipeline.ts`.
-
----
-
-## Architecture
-
-```
-UI button  ──session cookie──►  Next.js API
-                                      │
-                    ┌─────────────────┼─────────────────┐
-                    ▼                 ▼                 ▼
-         Scraper Studio         Groq / Pollinations   Supabase
-         POST /dca/trigger                            (user RLS)
-         GET  /dca/dataset
-
-n8n (Monday 09:00 or manual webhook)
-      POST /api/jobs/weekly + X-Webhook-Secret
-              │
-              ▼
-      Next.js (service role) runs the same API pipeline
-      (still only Scraper Studio for scrape steps)
-```
-
-n8n never calls Bright Data or Groq. If n8n is down, the dashboard still works.
-
-Health: `GET /api/health` (includes which collector IDs are set).
-
----
-
-## Scraper Studio collectors
-
-Copy each collector ID from Scraper Studio (starts with `c_`) into `.env.local`. The collector **Inputs** tab must match the payload we send.
-
-| Env var | Used by | Input payload | Flexible output fields |
-|---|---|---|---|
-| `BRIGHTDATA_API_KEY` | All requests | Bearer token | — |
-| `BRIGHTDATA_SERP_ZONE` | `POST /api/brands/:id/discover-competitors` | SERP API zone name (default: `serp`) | — |
-| `BRIGHTDATA_COLLECTOR_BRAND_WEBSITE` | `POST /api/brands` | `{ url }` | `title`, `description`, `text` / `markdown` (Groq). `raw_html` stored, not sent to the LLM |
-| `BRIGHTDATA_COLLECTOR_COMPETITORS` | Optional Scraper Studio fallback for discovery | `{ keyword, industry, brand_name }` | `name`, `website_url` / `url` / `link` |
-| `BRIGHTDATA_COLLECTOR_SOCIAL_HANDLES` | Find handles | `{ url }` | `platform`, `handle`, `profile_url` or `linkedin_url`, `twitter_url`, … |
-| `BRIGHTDATA_COLLECTOR_SOCIAL_CONTENT` | Scrape posts | `{ url, platform }` | `post_text` / `text`, `posted_at`, likes/comments |
-| `BRIGHTDATA_COLLECTOR_LINKEDIN_POSTS` | Optional override | `{ url }` | same as social content |
-| `BRIGHTDATA_COLLECTOR_X_POSTS` | Optional override | `{ url }` | same as social content |
-| `BRIGHTDATA_COLLECTOR_VERSION` | Optional | `dev` to hit the draft collector | — |
-
-Runtime:
-
-1. `POST https://api.brightdata.com/dca/trigger?collector=c_...&queue_next=1`
-2. Read `collection_id` (`j_...`)
-3. Poll `GET https://api.brightdata.com/dca/dataset?id=j_...` until the body is a JSON array (up to ~180s)
-
-If a collector ID is missing, the API returns an error telling you which env var to set. There is no Unlocker/SERP fallback.
 
 ---
 
@@ -91,14 +50,14 @@ If a collector ID is missing, the API returns an error telling you which env var
 
 | Route | Purpose | API |
 |---|---|---|
-| `/dashboard` | Counts | Supabase reads |
-| `/dashboard/brands/new` | Create brand | `POST /api/brands` |
-| `/dashboard/product` | Brand context | `GET` brands |
-| `/dashboard/competitors` | Discover, approve, handles, posts | discover / find-handles / scrape-content |
-| `/dashboard/intelligence` | Post feed | `GET /api/intelligence` |
-| `/dashboard/opportunities` | Gap analysis | `POST /api/brands/:id/analyze-gaps` |
-| `/dashboard/content` | Generate drafts | `POST /api/brands/:id/generate-content` |
-| `/dashboard/approvals` | Approve + publish | PATCH + `POST /api/publish` |
+| `/dashboard` | Platform metrics & quick actions | Supabase reads |
+| `/dashboard/brands/new` | Create brand & scrape website | `POST /api/brands` |
+| `/dashboard/product` | View & manage brand context profile | `GET /api/brands` |
+| `/dashboard/competitors` | Discover, approve, find handles, scrape posts & blogs | `/discover-competitors`, `/find-handles`, `/scrape-content`, `/scrape-blog` |
+| `/dashboard/intelligence` | Feed of scraped competitor posts & blog articles | `GET /api/intelligence` |
+| `/dashboard/opportunities` | AI gap analysis report, competitor strategy insights, topic recommendations & direct post/blog generation | `POST /api/brands/:id/analyze-gaps` |
+| `/dashboard/content` | Generate & view draft Blog Articles and Social Posts | `POST /api/brands/:id/generate-content` |
+| `/dashboard/approvals` | Review, edit notes, approve, and queue publish | PATCH `/api/generated-content/:id` + `POST /api/publish` |
 
 ---
 
@@ -107,33 +66,14 @@ If a collector ID is missing, the API returns an error telling you which env var
 | Method | Path | Who scrapes / thinks |
 |---|---|---|
 | POST | `/api/brands` | Scraper Studio `BRAND_WEBSITE` + Groq |
-| POST | `/api/brands/:id/discover-competitors` | Scraper Studio `COMPETITORS` |
-| POST | `/api/competitors/:id/find-handles` | Scraper Studio `SOCIAL_HANDLES` |
-| POST | `/api/competitors/:id/scrape-content` | Scraper Studio `SOCIAL_CONTENT` or LinkedIn/X override |
-| POST | `/api/brands/:id/analyze-gaps` | Groq |
-| POST | `/api/brands/:id/generate-content` | Groq + Pollinations |
-| POST | `/api/publish` | Buffer or queued |
-| POST | `/api/jobs/weekly` | Secret; same scrape collectors + analyze + one draft per ready brand |
-
-Callback routes are gone. Manual UI buttons hit the feature APIs; n8n only hits `/api/jobs/weekly`.
-
----
-
-## n8n (scheduler only)
-
-File: `n8n_workflows/weekly_refresh.json`
-
-- Schedule: every Monday 09:00
-- Optional webhook: `POST /webhook/weekly-refresh`
-- Both call `POST {NEXTJS_APP_URL}/api/jobs/weekly` with `X-Webhook-Secret`
-
-Import and activate that one workflow. Docker: `docker compose up` → http://localhost:5678
-
-Weekly job, for each `brands.status = ready`:
-
-1. Approved competitors → Scraper Studio handles + posts
-2. Gap analysis (Groq)
-3. One LinkedIn draft from the top topic
+| POST | `/api/brands/:id/discover-competitors` | Bright Data SERP API |
+| POST | `/api/competitors/:id/find-handles` | Bright Data Social Handles / HTML Parser |
+| POST | `/api/competitors/:id/scrape-content` | Bright Data LinkedIn/X Datasets or Scraper Studio |
+| POST | `/api/competitors/:id/scrape-blog` | Bright Data Brand Collector + Cheerio Blog Parser (`runScrapeBlog`) |
+| POST | `/api/brands/:id/analyze-gaps` | Groq AI Gap Analysis Engine |
+| POST | `/api/brands/:id/generate-content` | Groq (Blog articles & Social posts) + Pollinations |
+| POST | `/api/publish` | Buffer or queued job |
+| POST | `/api/jobs/weekly` | Secret; handles + posts + blog scrape + analyze + draft per ready brand |
 
 ---
 
@@ -141,24 +81,26 @@ Weekly job, for each `brands.status = ready`:
 
 | Table | Role |
 |---|---|
-| `tenants` / `profiles` | Workspace + user |
-| `brands` | Context JSON, scrape status |
-| `competitors` | `discovered` / `approved` / `rejected` |
-| `competitor_social_handles` | Platform + URL |
-| `competitor_content` | Scraped posts |
-| `gap_analysis_reports` | Findings JSON |
-| `generated_content` | Drafts |
-| `publish_jobs` | Queue |
-
-RLS: tenant members on user APIs. Weekly job uses the service role.
+| `tenants` / `profiles` | Workspace & user management |
+| `brands` | Brand context JSON & scrape status |
+| `competitors` | Competitor directory (`discovered`, `approved`, `rejected`) |
+| `competitor_social_handles` | Platform, handle & profile URL |
+| `competitor_content` | Scraped social posts & blog articles |
+| `gap_analysis_reports` | Findings JSON (`gaps`, `topics`, `formats`, `competitor_insights`) |
+| `generated_content` | AI drafts (`content_type: 'article' | 'post'`, `platform: 'blog' | 'linkedin' | 'twitter' | 'instagram'`) |
+| `publish_jobs` | Queue & status |
 
 ---
 
-## Local run
+## Local run & workflow
 
-1. Fill `.env.local`: Supabase, `GROQ_API_KEY`, `BRIGHTDATA_API_KEY`, and Scraper Studio collector IDs (`c_...`).
+1. Fill `.env.local`: Supabase credentials, `GROQ_API_KEY`, `BRIGHTDATA_API_KEY`, `BRIGHTDATA_SERP_ZONE`, and collector/dataset IDs.
 2. `pnpm dev` — http://localhost:3000
-3. Optional: `docker compose up`, import `weekly_refresh.json`, activate it.
-4. Demo: add brand → My Product → Discover → Approve → Find handles → Scrape posts → Intelligence → Run analysis → Generate → Approve.
-
-Confirm rows in Supabase after each click. Collector runs often take 30–180 seconds (API `maxDuration` is 120s on scrape routes; weekly job is 300s).
+3. Complete flow:
+   - Add Brand → Scrape website context
+   - Discover Competitors → Approve relevant rivals
+   - Find Handles → Scrape posts & Scrape blog
+   - Intelligence → Inspect collected feed
+   - Opportunities → Run Gap Analysis → Click `+ Post` or `+ Blog` on recommended topics
+   - Content Library → Generate custom Blog Articles or Social Posts
+   - Approvals → Review, approve & publish

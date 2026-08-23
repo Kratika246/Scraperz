@@ -31,9 +31,10 @@ export async function POST(
 
   const { data: content } = await supabase
     .from('competitor_content')
-    .select('text, platform, content_type')
+    .select('title, text, platform, content_type, posted_at')
     .eq('tenant_id', brand.tenant_id)
-    .limit(20);
+    .order('posted_at', { ascending: false })
+    .limit(40);
 
   const { data: report, error: insertError } = await supabase
     .from('gap_analysis_reports')

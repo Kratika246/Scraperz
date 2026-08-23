@@ -21,6 +21,7 @@
  */
 import { bdclient } from '@brightdata/sdk';
 import * as cheerio from 'cheerio';
+import { recordSelfHealingEvent, aiRepairExtraction } from '@/lib/self_healing';
 
 let bdInstance: bdclient | null = null;
 function getBdClient() {
@@ -625,6 +626,40 @@ export async function scrapeSocialHandles(websiteUrl: string) {
     });
   }
 
+  // 4. Self-Healing AI Repair Fallback if static DOM & regex extraction yield 0 items
+  if (links.length === 0 && html) {
+    try {
+      const repaired = await aiRepairExtraction<{ platform: string; profile_url: string }[]>(
+        html,
+        'Extract all social profile URLs (LinkedIn, Twitter/X, Instagram, YouTube, Facebook, GitHub, TikTok) present in the page HTML as an array of objects: { platform: string, profile_url: string }',
+        []
+      );
+      for (const item of repaired) {
+        const url = resolveUrl(item.profile_url, websiteUrl);
+        if (url && item.platform) push(item.platform, url);
+      }
+      if (links.length > 0) {
+        recordSelfHealingEvent({
+          url: websiteUrl,
+          target_feature: 'social_handles',
+          failure_reason: 'Static DOM selectors and aria-labels absent/modified',
+          healing_strategy: 'AI Structural DOM Repair (Groq Parser)',
+          items_recovered: links.length,
+        });
+      }
+    } catch (err) {
+      console.warn('AI repair fallback failed:', err);
+    }
+  } else if (links.length > 0) {
+    recordSelfHealingEvent({
+      url: websiteUrl,
+      target_feature: 'social_handles',
+      failure_reason: 'Static DOM aria-labels changed or absent',
+      healing_strategy: 'Multi-Tier DOM & Regex Fallback',
+      items_recovered: links.length,
+    });
+  }
+
   return links.map((l) => ({
     platform: l.platform,
     handle: l.handle,
@@ -854,7 +889,7 @@ export async function scrapeBrandBlog(
     }
   });
 
-  // Fallback: any link under the blog path prefix, if the article-scoped search found nothing
+  // Fallback 1: any link under the blog path prefix, if the article-scoped search found nothing
   if (candidates.size === 0 && blogPathPrefix) {
     $('a[href]').each((_, el) => {
       const href = $(el).attr('href');
@@ -869,6 +904,43 @@ export async function scrapeBrandBlog(
       } catch {
         /* skip */
       }
+    });
+  }
+
+  // Fallback 2: Self-Healing AI Blog Link Discovery if static selectors yield 0 items
+  if (candidates.size === 0 && listing.raw) {
+    try {
+      const repairedLinks = await aiRepairExtraction<{ url: string; title?: string }[]>(
+        listing.raw,
+        'Discover all individual blog post article URLs present in this HTML listing page as array: { url: string, title?: string }',
+        []
+      );
+      for (const item of repairedLinks) {
+        if (!item.url) continue;
+        try {
+          const url = item.url.startsWith('http') ? new URL(item.url) : new URL(item.url, blogUrl);
+          candidates.set(url.href, item.title || '');
+        } catch { /* skip */ }
+      }
+      if (candidates.size > 0) {
+        recordSelfHealingEvent({
+          url: blogUrl,
+          target_feature: 'blog_posts',
+          failure_reason: '<article> containers absent / DOM altered',
+          healing_strategy: 'AI Blog Link Discovery Repair (Groq Parser)',
+          items_recovered: candidates.size,
+        });
+      }
+    } catch (err) {
+      console.warn('AI blog link recovery failed:', err);
+    }
+  } else if (candidates.size > 0) {
+    recordSelfHealingEvent({
+      url: blogUrl,
+      target_feature: 'blog_posts',
+      failure_reason: 'Static container class names changed',
+      healing_strategy: 'Path Prefix & DOM Heuristic Fallback',
+      items_recovered: candidates.size,
     });
   }
 
